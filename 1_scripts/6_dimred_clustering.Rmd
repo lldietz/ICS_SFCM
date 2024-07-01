@@ -36,9 +36,8 @@ source("0_source.R")
 
 ## 1) Load data
 
-### 1.1) Cleaned data
+### 1.1) Cleaned flowSet
 
-This is the experiment metadata.
 
 ```{r Read files, message = FALSE}
 
@@ -48,9 +47,7 @@ pData(fs_clean)
 
 ```
 
-### 1.2) Spectral flow panel
-
-This is the panel used. Type markers are markers that indicate surface markers, such as CD3, CD4, or markers that you do want to use for clustering. State markers are markers that indicate "state" of a cell, such as PD-L1 marker, or use it to indicate markers you won't use for clustering.
+### 1.2) Panel
 
 ```{r Read panel, message = FALSE}
 
@@ -59,16 +56,15 @@ panel = read.csv(file = glue("{dir_project}/2_pipeline/{folder_QC}/out/Panel.csv
 
 # define type and state markers
 gated_markers = c("CD14_16","CD19","CD3")
-features_state= panel[panel$marker_class=="state","antigen"]
 features_type = setdiff(panel[panel$marker_class=="type","antigen"], gated_markers)
-features_effectormemory = c("CD45RA","CCR7","CD27","CD95")
+features_state= panel[panel$marker_class=="state","antigen"]
 features_inhibitory = c("TIGIT","PD1","CD39")
 features_chemokineR = c("CCR4","CXCR5")
 features_cytokine_degran = c("CD107a","IFN","TNF","IL2","IL413")
 features_effectorproteins = c("Perforin","GzmB","GzmK","Granulysin")
-features_TF = c("Tbet","TCF1","FoxP3")
+features_TF = c("Tbet","TCF1")
 features_prolif = c("Ki67")
-features_clustering = c(features_type, features_effectormemory, "FoxP3")
+features_clustering = features_type
 
 # choose channels to use in SCE
 panel[panel$fcs_colname == "SSC-A", "antigen"] = "SSC"
@@ -133,6 +129,8 @@ delta_area(sce)
 
 ```
 
+### 2.3 Save and read clustered SCE
+
 ```{r Save clustered data, message = FALSE}
 
 saveRDS(sce, file = glue("{dir_store}/sce_clust.rds"))
@@ -142,214 +140,7 @@ sce
 ```
 
 
-### 2.3) Visualization
-
-**Minimum spanning tree (MST)**
-
-
-```{r Plot MST, message = FALSE}
-no_clusters = 25
-channels_fsom = panel[panel$antigen %in% features_clustering,"fcs_colname"]
-
-# specify grid & markers for clustering
-fsom = FlowSOM::FlowSOM(input = fs_clean,
-                        scale = F,
-                        colsToUse = channels_fsom, 
-                        seed = 1234,
-                        nClus = no_clusters, 
-                        xdim = 10,
-                        ydim = 10)
-
-mst = FlowSOM::BuildMST(fsom)
-
-# visualize with 'PlotStars'
-png(file = glue("{dir_store}/fsom_meta{no_clusters}.png"), width=14,height=12,units="in",res=400)
-FlowSOM::PlotStars(fsom,
-          backgroundValues = fsom$metaclustering,
-          backgroundColors = colorRampPalette(CATALYST:::.cluster_cols)(25))
-dev.off()
-#FlowSOM::PlotNumbers(fsom)
-
-```
-
-**Number of cells per sample**
-
-The plots show cell count for each of the samples on top and the relative abundance of each matched setnumber:
-
-```{r plotCounts, message = FALSE}
-
-plotCounts(sce,
-           group_by = "sample_id",
-           color_by = "stimulation")
-
-```
-
-**Pseudobulk-level MDS plot**
-
-A pbMDS plot will give a sense of similarities between clusters and/or samples in an unsupervised way and of key difference in expression before conducting any formal testing.
-
-**MDS on sample-level pseudobulks**
-
-```{r Sample-level pseudobulks, message = FALSE, warning=FALSE, fig.width=5, fig.height=5}
-
-ei(sce)$stimulation
-
-# sample-level pseudobulks
-pbMDS(sce,
-      features = "type",
-      k = "meta20",
-      by = "both",
-      shape_by = "stimulation",
-      size_by = F)+ 
-  theme(aspect.ratio = .7)
-
-```
-
-**MDS on pseudobulks by cluster-sample**
-
-Pseudobulks computed for each cluster-sample colored by cluster (to highlight similarity between cell subpopulations), and shaped by condition (to reveal subpopulation-specific expression changes across conditions).
-
-Here, see that cluster-sample instances of the same cell subpopulations group together. Meanwhile, most subpopulations exhibit a shift between instances where samples come from different infection groups.
-
-```{r By cluster-sample, message = FALSE, warning=FALSE, fig.width=5, fig.height=5}
-meta_name = "meta20"
-# pseudobulks by cluster-sample
-pbMDS(sce,
-       features = "type",
-       by = "both",
-       k = "meta20",
-       shape_by = "stimulation",
-       size_by = FALSE)+ 
-  theme(aspect.ratio = .7)
-
-
-```
-
-**Reduced dimension plot on CLR of proportions**
-
-A dimensionality reduction plot on centered log-ratios (CLR) of sample/cluster proportions across clusters/samples will give a sense of similarities between samples/clusters in terms of their composition.
-
-*CLR on cluster proportions across samples*
-
-We here visualize the first two PCs computed on CLRs of sample proportions across clusters: small distances between samples mean similar cluster compositions between them, while large distances are indicative of differences in cluster proportions.
-
-```{r Cluster proportions across samples, message = FALSE}
-
-clrDR(sce,
-      dr = "PCA",
-      by = "sample_id",
-      point_col = "stimulation",
-      k = "meta20")
-
-```
-
-*CLR on sample proportions across clusters*
-
-```{r Sample proportions across clusters, message = FALSE}
-
-clrDR(sce,
-      by = "cluster_id",
-      arrow_col = "stimulation",
-      size_by = FALSE) 
-
-```
-
-**Heatmap of aggregated marker expressions**
-
-Heatmaps of aggregated (pseudobulk) marker expressions.
-
-*Clustering markers*
-
-```{r Type markers, message = FALSE}
-
-plotExprHeatmap(sce,
-                features = features_clustering,
-                by = "sample_id",
-                row_anno = c("stimulation"),
-                scale = "last",
-                bars = FALSE)
-
-```
-
-*Cytokines and degranulation+effector*
-
-```{r Differentiation markers, message = FALSE}
-
-plotExprHeatmap(sce,
-                features = c(features_cytokine_degran,features_effectorproteins),
-                by = "sample_id",
-                row_anno = c("stimulation"),
-                scale = "last",
-                bars = FALSE)
-
-```
-
-*State markers*
-
-```{r Activation markers, message = FALSE}
-
-plotExprHeatmap(sce,
-                features = features_state,
-                by = "sample_id",
-                row_anno = c("stimulation"),
-                scale = "last",
-                bars = FALSE)
-
-```
-
-
-**Pseudobulk expression boxplot**
-
-*By metacluster*
-
-By metacluster to compare medians for each cluster, and potentially identify changes across conditions early on:
-
-```{r By metacluster, message = FALSE, fig.width=15, fig.height=12}
-
-plotPbExprs(sce,
-            k = "meta20",
-            features = features_clustering,
-            facet_by = "cluster_id",
-            color_by = "stimulation")
-
-```
-
-*By antigen*
-
-By antigen in order to compare marker expressions calculated over all cells across conditions:
-
-```{r By antigen, message = FALSE, fig.width=15, fig.height=12}
-
-plotPbExprs(sce,
-            k = "meta20",
-            features = features_clustering,
-            facet_by = "antigen",
-            color_by = "stimulation")
-
-```
-
-*Type-marker expression across clusters*
-
-Aggregate expression values by both clusters and samples to see how consistent type-markers are expressed across clusters. The resulting plot gives an indication how good our selection of type markers is: Ideally, their expression should be fairly specific to a subset of clusters.
-
-```{r Type-marker expression across clusters, message = FALSE, fig.width=15, fig.height=8}
-
-plotPbExprs(sce,
-            k = "meta20",
-            features = features_clustering,
-            group_by = "cluster_id",
-            color_by = "sample_id",
-            size_by = TRUE,
-            geom = "points",
-            jitter = FALSE)
-
-```
-
-
-
-### 2.4) Dimensionality reduction
-
-Dimensionality reduction of the FlowSOM clusters in our SCE using the following markers:
+### 2.4) Dimensionality reduction (UMAP)
 
 ```{r Run dimensionality reduction, message = FALSE}
 
@@ -362,69 +153,22 @@ sce = runDR(sce,
 ```
 
 
-```{r Plot, message=FALSE}
 
-plotDR(sce,
-       color_by = "meta25")
-
-```
-
-
-
-### 2.5) Save dimred SCE 
+### 2.5) Save and read dimred SCE 
 
 ```{r Save SCE, message = FALSE}
 
 saveRDS(sce, glue("{dir_out}/sce_clust_dimred.rds"))
-
-```
-
-### 2.6) Read dimred SCE
-
-```{r Read SCE, message = FALSE}
-
 sce = readRDS(file = glue("{dir_out}/sce_clust_dimred.rds"))
 sce$stimulation = factor(sce$stimulation,levels = c("NEG", "GAG", "SEB"))
 
 ```
 
+
 ## 3) Cluster visualization
 
 
-### 3.1) Clustree and UMAPs
-
-```{r Clustree, message = FALSE, fig.width = 20, fig.height = 14}
-
-meta_range = c(2:25)
-sce_plot = sce
-
-png(file = glue("{dir_store}/clustree_meta{max(meta_range)}.png"), width=14,height=12,units="in",res=200)
-q_Clustree(sce_plot, metarange = meta_range)
-dev.off()
-
-# list3 = list()
-# for(metalevel in meta_range){
-#   
-#   meta_name = glue("meta{metalevel}")
-#   
-#   plt = q_plotDR(q_DownsampleSCE(sce_plot,1000),
-#                  color_by = meta_name,
-#                  labelsize = 3)+
-#   ggtitle(label = glue("{meta_name}"))+
-#   theme(plot.title = element_text(hjust = 0.5))
-#   
-#   list3[[meta_name]] = plt
-#   
-# }
-# 
-# png(file = glue("{dir_store}/UMAPs.png"), width=40,height=20,units="in",res=200)
-# grid.arrange(grobs = list3, ncol = 5)
-# dev.off()
-
-
-```
-
-### 3.2) Visualizing FlowSOM clusters on UMAP projection
+### 3.1) Visualizing FlowSOM clusters 
 
 ```{r Visualize FlowSOM clusters on UMAP, message = FALSE, fig.width=14, fig.height=12}
 
@@ -455,11 +199,6 @@ dev.off()
 
 width = 5
 height = 4.29
-
-png(file = glue("{dir_store}/UMAP_meta25_nolabel.png"), width=width,height=height,units="in",res=200)
-plotDR(sce,
-         color_by = "meta25")
-dev.off()
 
 
 for(feature in features_clustering){
@@ -501,20 +240,21 @@ dev.off()
 ```
 
 
-### 3.3) Add manual labels
+### 3.2) Cell types (manual gating)
+
+#### 3.2.1) Import aggregate labels
 
 ```{r Load SCE, message = FALSE}
 
-aggregate_labels = readRDS(glue("{dir_project}/2_pipeline/{folder_manualgate}/out/aggregate_labels.rds"))
+aggregate_labels = readRDS(glue("{dir_project}/2_pipeline/{folder_celltype}/out/aggregate_labels.rds"))
 manual_labels_SCE = as.factor(aggregate_labels)
 sce$manual_id = manual_labels_SCE
 
 ```
 
+#### 3.2.2) Plot labels on UMAP
 
-### 3.4) Visualizing manual labels on UMAP
-
-```{r Add manual cell labels, message = F, fig.width = 20, fig.height = 20}
+```{r UMAP, message = F, fig.width = 20, fig.height = 20}
 
 cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
 width = 14*0.8
@@ -545,13 +285,21 @@ dev.off()
 ```
 
 
-### 3.4) Add boolean matrix of marker positivity
+### 3.3) Boolean matrix of marker positivity
 
-```{r}
+#### 3.3.1) Import boolean matrix
 
-boolean_matrix_marker_positivity = read.csv(file = glue("{dir_project}/2_pipeline/6_gateMarkers/out/boolean_matrix_markerpositivity.csv"))[,-1]
+```{r import matrix, message=F}
+boolean_matrix_marker_positivity = read.csv(file = glue("{dir_project}/2_pipeline/{folder_marker}/out/boolean_matrix_marker+.csv"))[,-1]
 names(boolean_matrix_marker_positivity) = gsub(".$","_pos",names(boolean_matrix_marker_positivity))
 marker_positivity_to_plot = names(boolean_matrix_marker_positivity)[-1]
+```
+
+
+#### 3.3.2) Add to colData(sce)
+
+```{r add to coldata, message = F}
+
 new_coldata = cbind(colData(sce),boolean_matrix_marker_positivity)
 sce = scdrake::sce_add_colData(sce, new_coldata, replace = TRUE)
 
@@ -560,7 +308,7 @@ colnames(boolean_matrix_marker_positivity)
 
 ```
 
-### 3.5) Plot UMAP of boolean markers
+#### 3.3.1) Plot UMAP of boolean markers
 
 ```{r}
 
@@ -589,68 +337,10 @@ for(color_plot in marker_positivity_to_plot){
   
 }
 
-q_plotDR_shuffled(sce,
-                  color_by = "IFN_pos",
-                  facet_by = "stimulation")
-
-```
-
-### 3.6) Backgroup subtracted (expression)
-
-```{r Make dataframe of sce, message = F}
-
-colData(sce)
-names(cluster_codes(sce))
-assayNames(sce)
-#assay(sce,"exprs")
-rownames(assay(sce,"exprs"))
-colData(sce)$meta25 = cluster_ids(sce,"meta25")
-
-rowsum(colData(sce),group = c("stimulation","meta25"))
-
-df = t(assay(sce,"exprs"))
-df = cbind(df,colData(sce))
-df = data.frame(df)
-head(df)
-colnames(df)
-df$stimulation = factor(df$stimulation,levels = c("NEG","GAG","SEB"))
-
-write.csv(df, file = glue("{dir_out}/dataframe_sce.csv"))
-
-df <- df %>% select(-contains('_pos'))
-
-df_by_meta25_stim = aggregate(. ~ meta25+stimulation, data=df[,!(names(df) %in% c("cluster_id", "manual_id","sample_id"))], FUN=median)
-
-names(df_by_meta25_stim)
-
-df_long = df_by_meta25_stim %>% 
-  pivot_longer(cols = -c(meta25, stimulation), 
-               names_to = "marker",
-               values_to = "value")
-
-df_long = df_long %>% 
-   group_by(meta25) %>% 
-   mutate(value_backgroundsubtracted = value- value[stimulation == "NEG"])
-
-df_long[(df_long$meta25 == 1 & df_long$marker=="IL2"),]
-
-pdf(file = glue("{dir_store}/markers_backgroundsubtracted.pdf"), width = 10,height=90)
-ggplot(df_long, aes(fill=stimulation, y=value_backgroundsubtracted, x=meta25)) + 
-  geom_bar(position="dodge", stat="identity")+
-  facet_wrap(~marker,ncol = 1, scales="free_y")+
-  scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))
-dev.off()
-
-features1 = features_clustering
-features2 = c(features_cytokine_degran,features_chemokineR)
-features3 = features_effectorproteins
-features4 = features_inhibitory
-
-
 ```
 
 
-### 2.7) Background subtracted (percent pos)
+#### 3.3.2) Background subtracted (percent pos)
 
 ```{r}
 
@@ -795,260 +485,17 @@ blank_theme <- theme_minimal()+
 ```
 
 
-## 4) Plot expression
-
-```{r Marker expression between conditions, message = F}
-
-palette = values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049")
-features1 = features_clustering
-features2 = c(features_cytokine_degran,features_chemokineR)
-features3 = features_effectorproteins
-features4 = features_inhibitory
-
-png(filename = glue("{dir_store}/markerexpr_clustering.png"),width = 12, height = 6,unit = "in",res = 300)
-plotPbExprs(sce,
-            k = "meta25",
-            features = features1,
-            facet_by = "antigen",
-            color_by = "stimulation",
-            group_by = "cluster_id",
-            geom = "point",
-            jitter=F)+
-  scale_color_manual(values = palette)+
-  ggtitle(label = "Markers used for clustering")
-dev.off()
-
-png(filename = glue("{dir_store}/markerexpr_cytokines_chemokines.png"),width = 12, height = 10,unit = "in",res = 300)
-plotPbExprs(sce,
-            k = "meta25",
-            features = features2,
-            facet_by = "antigen",
-            color_by = "stimulation",
-            group_by = "cluster_id",
-            geom = "point",
-            jitter=F)+
-  scale_color_manual(values = palette)+
-  ggtitle(label = "Cytokines and chemokines")
-dev.off()
-
-png(filename = glue("{dir_store}/markerexpr_effectormolecules.png"),width = 8, height = 6,unit = "in",res = 300)
-plotPbExprs(sce,
-            k = "meta25",
-            features = features3,
-            facet_by = "antigen",
-            color_by = "stimulation",
-            group_by = "cluster_id",
-            geom = "point",
-            jitter=F)+
-  scale_color_manual(values = palette)+
-  ggtitle(label = "Effector molecules")
-dev.off()
-
-png(filename = glue("{dir_store}/markerexpr_inhibmolecules.png"),width = 12, height = 4,unit = "in",res = 300)
-plotPbExprs(sce,
-            k = "meta25",
-            features = features4,
-            facet_by = "antigen",
-            color_by = "stimulation",
-            group_by = "cluster_id",
-            geom = "point",
-            jitter=F)+
-  scale_color_manual(values = palette)+
-  ggtitle(label = "Inhibitory molecules")
-dev.off()
-
-
-```
-
 ## 5) Save flowSet with cluster ids
 
 ```{r save flowSet, message = F}
 
-colData(sce)
-colData(sce)$meta25 = cluster_ids(sce,"meta25")
-colData(sce)
 fs_clust = sce2fcs(sce, 
                    split_by = "sample_id", 
                    keep_cd = T, 
                    keep_dr = F, 
                    assay = "exprs")
 
-#flowCore::fr_append_cols(ff_o, m)
-
 saveRDS(fs_clust, glue("{dir_out}/flowSet_clust.rds"))
-
-```
-
-```{r Extract clusters, message=FALSE}
-
-sce_NEG = filterSCE(sce,
-                    stimulation == "NEG")
-
-sce_GAG = filterSCE(sce,
-                    stimulation == "GAG")
-
-sce_SEB = filterSCE(sce,
-                    stimulation == "SEB")
-
-extractClusters(sce_NEG,
-                                 k = "meta25",
-                                 clusters = as.character(1),
-                                 as = "flowSet")
-
-ei(sce)
-# extractClusters does not conserve the file ID
-my_list = list()
-list_clusters = list()
-for(stim in c(ei(sce)$stimulation)){
-  
-  print(stim)
-  sce_filtered = filterSCE(sce,
-                           stimulation == stim)
-  
-  for(cluster_no in c(1:25)){
-    
-    name_metacluster = glue("meta{cluster_no}")
-    name_flowSet = glue("flowSet_{name_metacluster}")
-    
-    fs_cluster = extractClusters(sce_filtered,
-                                 k = "meta25",
-                                 clusters = as.character(cluster_no),
-                                 as = "flowSet",
-                                 verbose = F)
-    
-    list_clusters[[name_metacluster]] = fs_cluster
-  
-  }
-  
-  my_list[[stim]] = list_clusters
-
-}
-
-
-saveRDS(my_list, file = glue("{dir_out}/list_flowSets.rds"))
-
-```
-
-# PROJECT DESCRIPTION FIG
-
-```{r Figure for PhD, message = F}
-cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
-blank_theme <- theme_minimal()+
-  theme(
-  axis.title.x = element_blank(),
-  axis.title.y = element_blank(),
-  panel.border = element_blank(),
-  panel.grid=element_blank(),
-  axis.ticks = element_blank()
-  )
-
-
-fig1a = q_plotDR(sce,
-                 color_by = "manual_id",
-                 labelsize = 3,
-                 highlight_clust = cell_types_of_interest)+ 
-  guides(color=guide_legend(title="Manual gating",override.aes = list(size = 4)))
-
-
-fig1b = q_plotDR(sce,
-                 color_by = "meta25",
-                 labelsize = 3)+ 
-  guides(color=guide_legend(title="FlowSOM metacluster",override.aes = list(size = 4)))
-
-
-
-fig1c = plotDR(sce,
-               color_by = features_clustering,
-               ncol = 2)
-
-fig1d = plotDR(filterSCE(sce,
-                         stimulation != "SEB"),
-               color_by = "IFN_pos",
-               facet_by = "stimulation",
-               ncol = 2)+
-  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red"))+
-  guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
-
-fig1d_alt = q_plotDR_shuffled(filterSCE(sce,
-                         stimulation != "SEB"),
-               color_by = "IFN_pos",
-               facet_by = "stimulation",
-               ncol = 1)+
-  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red"))+
-  guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
-
-fig1d_alt$layers[[1]]$aes_params$size = 0.005
-
-markers_to_plot = c("IFN_pos")
-df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
-
-# transform n_pos_backgroundsubtracted to a percentage 
-df_plot = df_plot %>% group_by(marker) %>%
-  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
-
-df_plot$marker = factor(df_plot$marker,levels = c("IFN_pos","TNF_pos","CD107a_pos"))
-
-fig1e = print(ggplot(df_plot, 
-               aes(x="", 
-                   y=percentage, 
-                   fill=meta25))+
-  geom_bar(width = 1, stat = "identity")+
-  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
-  blank_theme+theme(axis.text.x=element_blank())+
-    guides(fill=guide_legend(title="FlowSOM metacluster",override.aes = list(size = 4))))
-
-markers_to_plot = c("IFN_pos","TNF_pos","CD107a_pos")
-df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
-
-# transform n_pos_backgroundsubtracted to a percentage 
-df_plot = df_plot %>% group_by(marker) %>%
-  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
-
-fig1e_alt = print(ggplot(df_plot, 
-                         aes(x="", 
-                             y=percentage, 
-                             fill=meta25))+
-                    geom_bar(width = 1, stat = "identity")+
-                    facet_wrap(~marker,
-                               ncol = 1,
-                               labeller = as_labeller(c("CD107a_pos" = "CD107a",
-                                                        "IFN_pos" = "IFN",
-                                                        "TNF_pos" = "TNF")))+
-                    scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
-                    blank_theme+theme(axis.text.x=element_blank(),legend.position = "none"))
-
-# design <- "
-# AAAABBBB
-# AAAABBBB
-# CCCCDDDD
-# CCCCDDDD
-# CCCCEEE#
-# CCCCEEE#
-# "
-# png(filename = glue("{dir_out}/Figure1.png"), width = 16,height = 15,unit = "in",res = 300)
-# fig1a + fig1b + fig1c + fig1d + fig1e + plot_layout(design = design)+ plot_annotation(tag_levels = 'A')&theme(plot.tag = element_text(size = 20, face = 'bold'))
-# dev.off()
-
-
-design <- "
-AAAAABBBBB
-AAAAABBBBB
-AAAAABBBBB
-CCCCCDDDEE
-CCCCCDDDEE
-CCCCCDDDEE
-CCCCCDDDEE
-"
-
-fig1a$layers[[1]]$aes_params$size = 0.005
-fig1b$layers[[1]]$aes_params$size = 0.005
-fig1c$layers[[1]]$aes_params$size = 0.000000001
-fig1d_alt$layers[[1]]$aes_params$size = 0.000000001
-
-
-png(filename = glue("{dir_out}/Figure1_alt.png"), width = 16,height = 15,unit = "in",res = 300)
-fig1a + fig1b + fig1c + fig1d_alt + fig1e_alt + plot_layout(design = design)+ plot_annotation(tag_levels = 'A')&theme(plot.tag = element_text(size = 20, face = 'bold'))
-dev.off()
 
 ```
 

@@ -118,8 +118,8 @@ cyto_plot(gs[1:3],
 
 ######## PLOT GATES ########
 
-height = 4
-width = 10
+height = 5
+width = 18
 
 png(filename = glue("{dir_store}/Gatingscheme.png"), height = height, width = width, unit = "in", res = 400)
 cyto_plot_gating_scheme(gs,
@@ -130,6 +130,10 @@ dev.off()
 png(filename = glue("{dir_store}/gatingtree.png"), height = height, width = width, unit = "in", res = 400)
 plot(gs)
 dev.off()
+
+height = 4
+width = 10
+
 
 png(filename = glue("{dir_store}/Gating1_lymphocytes.png"), height = height, width = width, unit = "in", res = 400)
 cyto_plot(gs[1:3],
