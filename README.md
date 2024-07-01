@@ -116,7 +116,7 @@ The PeacoQC algorithm created QC fcs files, which can be read back into RStudio 
 ### Step E: Gate cell types
 **File to use**: `1_scripts/4_gateCellTypes.Rmd`
 
-![alt text](assets/gatingscheme_celltype.png){ width=80% }
+![alt text](assets/gatingscheme_celltype.png)
 
 **Figure 7: Gating strategy of manual gating**
 
