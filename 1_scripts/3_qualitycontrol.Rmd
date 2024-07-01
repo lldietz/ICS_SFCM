@@ -1,0 +1,169 @@
+---
+title: "Quality control"
+author: "*Lisa Loksø Dietz*"
+date: "*`r format(Sys.time(), '%Y-%m-%d')`*"
+knit: (function(inputFile, encoding) { 
+      out_dir = paste0(dirname(getwd()),"/3_output");
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(out_dir, '3_quality_control.html')) })
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    toc_collapsed: true
+    code_folding: show
+---
+
+
+```{r Markdown setup 1, include = FALSE}
+
+knitr::opts_chunk$set(fig.width=10, fig.height=7, out.width = "70%",fig.align = 'center', eval=FALSE, root.dir = getwd()) 
+
+```
+
+## 0) Load source and set dir
+
+```{r Directories, message = FALSE, warning = FALSE}
+
+rm(list=ls())
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+source("0_source.R")
+
+```
+
+
+## 1) Import pregated flowSet
+```{r Importing FCS files, message = FALSE}
+
+dir_read = glue("{dir_project}/2_pipeline/{folder_pregate}/out")
+fs_pregated = readRDS(file=glue("{dir_read}/FlowSet_pregated.rds"))
+
+```
+
+
+
+## 2) Read panel and clean names
+
+```{r Panel, message = FALSE}
+
+# read
+panel = read.csv(file=glue("{dir_project}/2_pipeline/{folder_transform}/out/Panel.csv"))[,-1]
+
+#clean
+panel$antigen[panel$antigen == "IL4-13"] = "IL4_13"
+panel$antigen = gsub("-","", as.character(panel$antigen))
+
+#save and reload
+write.csv(panel, file = glue("{dir_out}/Panel.csv"))
+panel = read.csv(file = glue("{dir_out}/Panel.csv"))[,-1]
+
+```
+
+
+## 3) Quality control (PeacoQC)
+
+### 3.1) Find IT and MAD
+```{r Find IT and MAD values}
+
+set.seed(1234)
+# 0.1, 4
+IT = 0.2
+MAD = 4
+channels_QC = panel[panel$marker_class!="none",]$fcs_colname
+dir.create(dir_write, showWarnings = FALSE)
+peacoqc_res = PeacoQC(ff = fs_pregated[[1]], 
+                      channels = channels_QC, 
+                      determine_good_cells = "all", 
+                      save_fcs = FALSE, 
+                      plot = TRUE, 
+                      output_directory = dir_tmp, 
+                      name_directory = "Results_PeacoQC",
+                      IT_limit = IT, 
+                      MAD = MAD,
+                      time_channel_parameter = "Time",
+                      time_unit = .1)
+
+```
+
+
+
+
+
+### 3.2) Save and read cleaned data
+```{r Save PeacoQC files, message = FALSE}
+
+set.seed(1234)
+for(i in 1:nrow(pData(fs_pregated))){
+  ff = fs_pregated[[i]]
+
+  peacoqc_res = PeacoQC(ff, 
+                        channels = channels_QC, 
+                        determine_good_cells = "all", 
+                        save_fcs = TRUE, 
+                        plot = TRUE, 
+                        output_directory = dir_store, 
+                        name_directory = "Results_PeacoQC",
+                        IT_limit = IT, 
+                        MAD = MAD,
+                        time_channel_parameter = "Time",
+                        time_unit = .1)
+} 
+
+rm(list=c("peacoqc_res","IT","MAD","channels_QC"))
+
+# read QC files
+fcs_dir = glue("{dir_store}/Results_PeacoQC/fcs_files")
+fs_clean = read.flowSet(path=fcs_dir, 
+                        pattern="*_tf_QC.fcs", 
+                        transformation=FALSE, 
+                        truncate_max_range = FALSE)
+
+
+```
+
+
+```{r Plot QC report, message = F}
+
+dir_read = glue("{dir_store}/Results_PeacoQC/PeacoQC_report.txt")
+pdf(file = glue("{dir_store}/Results_PeacoQC/Report.pdf"),width = 15, height = 5)
+PeacoQCHeatmap(report_location = dir_read, 
+               show_values=TRUE, 
+               show_row_names=TRUE,
+               latest_tests=FALSE, 
+               title="PeacoQC report")
+dev.off()
+
+```
+
+```{r Fix sample names and pData, message = FALSE}
+
+sampleNames(fs_clean) = glue("{str_sub(sampleNames(fs_clean),0,-8)}_pregated_QC.fcs")
+
+# add metadata to the fs
+fs_clean = q_AddExperimentInfo(fs_clean)
+pData(fs_clean)$sample_id = c("ROADMAP_A02","ROADMAP_A02","ROADMAP_A02")
+pData(fs_clean)$stimulation = c("GAG", "NEG", "SEB")
+
+pData(fs_clean)
+
+```
+
+
+```{r Save and read fs_clean, message = FALSE}
+
+saveRDS(fs_clean, file = glue("{dir_out}/FlowSet_clean.rds"))
+
+```
+
+
+
+
+## 4) Session info
+
+```{r Session info, message = TRUE}
+
+sessionInfo()
+
+```

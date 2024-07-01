@@ -1,0 +1,1062 @@
+---
+title: "Dimensionality reduction and clustering"
+author: "*Lisa Loksø Dietz*"
+date: "*`r format(Sys.time(), '%Y-%m-%d')`*"
+knit: (function(inputFile, encoding) { 
+      out_dir = paste0(dirname(getwd()),"/3_output");
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(out_dir, '5_dimred_clustering.html')) })
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    toc_collapsed: true
+    code_folding: show
+---
+
+```{r Setup 1, include = FALSE}
+
+knitr::opts_chunk$set(fig.width=10, fig.height=7, out.width = "70%",fig.align = 'center', eval=TRUE) 
+# eval controls whether code should be run when knitting
+# cache will avoid running again the code chunk again if you didn't change anything within it
+
+```
+
+## 0) Load source and set dir
+
+```{r Directories, message = FALSE, warning = FALSE}
+
+rm(list=ls())
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+source("0_source.R")
+
+```
+
+## 1) Load data
+
+### 1.1) Cleaned data
+
+This is the experiment metadata.
+
+```{r Read files, message = FALSE}
+
+read_dir = glue("{dir_project}/2_pipeline/{folder_QC}/out")
+fs_clean = readRDS(glue("{read_dir}/FlowSet_clean.rds"))
+pData(fs_clean)
+
+```
+
+### 1.2) Spectral flow panel
+
+This is the panel used. Type markers are markers that indicate surface markers, such as CD3, CD4, or markers that you do want to use for clustering. State markers are markers that indicate "state" of a cell, such as PD-L1 marker, or use it to indicate markers you won't use for clustering.
+
+```{r Read panel, message = FALSE}
+
+# read panel
+panel = read.csv(file = glue("{dir_project}/2_pipeline/{folder_QC}/out/Panel.csv"))[,-1]
+
+# define type and state markers
+gated_markers = c("CD14_16","CD19","CD3")
+features_state= panel[panel$marker_class=="state","antigen"]
+features_type = setdiff(panel[panel$marker_class=="type","antigen"], gated_markers)
+features_effectormemory = c("CD45RA","CCR7","CD27","CD95")
+features_inhibitory = c("TIGIT","PD1","CD39")
+features_chemokineR = c("CCR4","CXCR5")
+features_cytokine_degran = c("CD107a","IFN","TNF","IL2","IL413")
+features_effectorproteins = c("Perforin","GzmB","GzmK","Granulysin")
+features_TF = c("Tbet","TCF1","FoxP3")
+features_prolif = c("Ki67")
+features_clustering = c(features_type, features_effectormemory, "FoxP3")
+
+# choose channels to use in SCE
+panel[panel$fcs_colname == "SSC-A", "antigen"] = "SSC"
+panel[panel$fcs_colname == "SSC-A", "marker_class"] = "type"
+channels_sce = panel[(panel$marker_class!="none")&(!panel$antigen %in% gated_markers),"fcs_colname"]
+
+total_markers = length(channels_sce)
+
+```
+
+## 2) Clustering and visualization
+
+### 2.1) Single Cell Experiment (SCE)
+
+```{r Create SCE, message = FALSE}
+
+set.seed(1234)
+sce = prepData(fs_clean,
+               md = pData(fs_clean),
+               panel = panel,
+               features = channels_sce,
+               FACS = TRUE,
+               transform = FALSE,
+               panel_cols = list(channel = "fcs_colname",
+                                 antigen = "antigen"
+                                 ),
+               md_cols = list(file = "name",
+                              id = "name",
+                              factors = c("stimulation"
+                                          )
+                              )
+               )
+
+assayNames(sce)[1] = "exprs"
+
+saveRDS(sce, file = glue("{dir_store}/sce.rds"))
+sce = readRDS(file = glue("{dir_store}/sce.rds"))
+
+sce
+
+
+```
+
+### 2.2) Cluster SCE and delta area plot
+
+```{r Cluster and delta area plot, message = FALSE}
+
+set.seed(1234)
+no_clusters = 25
+meta_name = glue("meta{no_clusters}")
+features_clustering
+
+sce = cluster(sce,
+              features = features_clustering,
+              maxK = no_clusters,
+              xdim = 10,
+              ydim = 10,
+              verbose = TRUE,
+              seed = 1234)
+
+delta_area(sce)
+
+```
+
+```{r Save clustered data, message = FALSE}
+
+saveRDS(sce, file = glue("{dir_store}/sce_clust.rds"))
+sce = readRDS(file = glue("{dir_store}/sce_clust.rds"))
+sce
+
+```
+
+
+### 2.3) Visualization
+
+**Minimum spanning tree (MST)**
+
+
+```{r Plot MST, message = FALSE}
+no_clusters = 25
+channels_fsom = panel[panel$antigen %in% features_clustering,"fcs_colname"]
+
+# specify grid & markers for clustering
+fsom = FlowSOM::FlowSOM(input = fs_clean,
+                        scale = F,
+                        colsToUse = channels_fsom, 
+                        seed = 1234,
+                        nClus = no_clusters, 
+                        xdim = 10,
+                        ydim = 10)
+
+mst = FlowSOM::BuildMST(fsom)
+
+# visualize with 'PlotStars'
+png(file = glue("{dir_store}/fsom_meta{no_clusters}.png"), width=14,height=12,units="in",res=400)
+FlowSOM::PlotStars(fsom,
+          backgroundValues = fsom$metaclustering,
+          backgroundColors = colorRampPalette(CATALYST:::.cluster_cols)(25))
+dev.off()
+#FlowSOM::PlotNumbers(fsom)
+
+```
+
+**Number of cells per sample**
+
+The plots show cell count for each of the samples on top and the relative abundance of each matched setnumber:
+
+```{r plotCounts, message = FALSE}
+
+plotCounts(sce,
+           group_by = "sample_id",
+           color_by = "stimulation")
+
+```
+
+**Pseudobulk-level MDS plot**
+
+A pbMDS plot will give a sense of similarities between clusters and/or samples in an unsupervised way and of key difference in expression before conducting any formal testing.
+
+**MDS on sample-level pseudobulks**
+
+```{r Sample-level pseudobulks, message = FALSE, warning=FALSE, fig.width=5, fig.height=5}
+
+ei(sce)$stimulation
+
+# sample-level pseudobulks
+pbMDS(sce,
+      features = "type",
+      k = "meta20",
+      by = "both",
+      shape_by = "stimulation",
+      size_by = F)+ 
+  theme(aspect.ratio = .7)
+
+```
+
+**MDS on pseudobulks by cluster-sample**
+
+Pseudobulks computed for each cluster-sample colored by cluster (to highlight similarity between cell subpopulations), and shaped by condition (to reveal subpopulation-specific expression changes across conditions).
+
+Here, see that cluster-sample instances of the same cell subpopulations group together. Meanwhile, most subpopulations exhibit a shift between instances where samples come from different infection groups.
+
+```{r By cluster-sample, message = FALSE, warning=FALSE, fig.width=5, fig.height=5}
+meta_name = "meta20"
+# pseudobulks by cluster-sample
+pbMDS(sce,
+       features = "type",
+       by = "both",
+       k = "meta20",
+       shape_by = "stimulation",
+       size_by = FALSE)+ 
+  theme(aspect.ratio = .7)
+
+
+```
+
+**Reduced dimension plot on CLR of proportions**
+
+A dimensionality reduction plot on centered log-ratios (CLR) of sample/cluster proportions across clusters/samples will give a sense of similarities between samples/clusters in terms of their composition.
+
+*CLR on cluster proportions across samples*
+
+We here visualize the first two PCs computed on CLRs of sample proportions across clusters: small distances between samples mean similar cluster compositions between them, while large distances are indicative of differences in cluster proportions.
+
+```{r Cluster proportions across samples, message = FALSE}
+
+clrDR(sce,
+      dr = "PCA",
+      by = "sample_id",
+      point_col = "stimulation",
+      k = "meta20")
+
+```
+
+*CLR on sample proportions across clusters*
+
+```{r Sample proportions across clusters, message = FALSE}
+
+clrDR(sce,
+      by = "cluster_id",
+      arrow_col = "stimulation",
+      size_by = FALSE) 
+
+```
+
+**Heatmap of aggregated marker expressions**
+
+Heatmaps of aggregated (pseudobulk) marker expressions.
+
+*Clustering markers*
+
+```{r Type markers, message = FALSE}
+
+plotExprHeatmap(sce,
+                features = features_clustering,
+                by = "sample_id",
+                row_anno = c("stimulation"),
+                scale = "last",
+                bars = FALSE)
+
+```
+
+*Cytokines and degranulation+effector*
+
+```{r Differentiation markers, message = FALSE}
+
+plotExprHeatmap(sce,
+                features = c(features_cytokine_degran,features_effectorproteins),
+                by = "sample_id",
+                row_anno = c("stimulation"),
+                scale = "last",
+                bars = FALSE)
+
+```
+
+*State markers*
+
+```{r Activation markers, message = FALSE}
+
+plotExprHeatmap(sce,
+                features = features_state,
+                by = "sample_id",
+                row_anno = c("stimulation"),
+                scale = "last",
+                bars = FALSE)
+
+```
+
+
+**Pseudobulk expression boxplot**
+
+*By metacluster*
+
+By metacluster to compare medians for each cluster, and potentially identify changes across conditions early on:
+
+```{r By metacluster, message = FALSE, fig.width=15, fig.height=12}
+
+plotPbExprs(sce,
+            k = "meta20",
+            features = features_clustering,
+            facet_by = "cluster_id",
+            color_by = "stimulation")
+
+```
+
+*By antigen*
+
+By antigen in order to compare marker expressions calculated over all cells across conditions:
+
+```{r By antigen, message = FALSE, fig.width=15, fig.height=12}
+
+plotPbExprs(sce,
+            k = "meta20",
+            features = features_clustering,
+            facet_by = "antigen",
+            color_by = "stimulation")
+
+```
+
+*Type-marker expression across clusters*
+
+Aggregate expression values by both clusters and samples to see how consistent type-markers are expressed across clusters. The resulting plot gives an indication how good our selection of type markers is: Ideally, their expression should be fairly specific to a subset of clusters.
+
+```{r Type-marker expression across clusters, message = FALSE, fig.width=15, fig.height=8}
+
+plotPbExprs(sce,
+            k = "meta20",
+            features = features_clustering,
+            group_by = "cluster_id",
+            color_by = "sample_id",
+            size_by = TRUE,
+            geom = "points",
+            jitter = FALSE)
+
+```
+
+
+
+### 2.4) Dimensionality reduction
+
+Dimensionality reduction of the FlowSOM clusters in our SCE using the following markers:
+
+```{r Run dimensionality reduction, message = FALSE}
+
+set.seed(1234)
+sce = runDR(sce,
+            "UMAP",
+            cells = NULL,
+            features = features_clustering)
+
+```
+
+
+```{r Plot, message=FALSE}
+
+plotDR(sce,
+       color_by = "meta25")
+
+```
+
+
+
+### 2.5) Save dimred SCE 
+
+```{r Save SCE, message = FALSE}
+
+saveRDS(sce, glue("{dir_out}/sce_clust_dimred.rds"))
+
+```
+
+### 2.6) Read dimred SCE
+
+```{r Read SCE, message = FALSE}
+
+sce = readRDS(file = glue("{dir_out}/sce_clust_dimred.rds"))
+sce$stimulation = factor(sce$stimulation,levels = c("NEG", "GAG", "SEB"))
+
+```
+
+## 3) Cluster visualization
+
+
+### 3.1) Clustree and UMAPs
+
+```{r Clustree, message = FALSE, fig.width = 20, fig.height = 14}
+
+meta_range = c(2:25)
+sce_plot = sce
+
+png(file = glue("{dir_store}/clustree_meta{max(meta_range)}.png"), width=14,height=12,units="in",res=200)
+q_Clustree(sce_plot, metarange = meta_range)
+dev.off()
+
+# list3 = list()
+# for(metalevel in meta_range){
+#   
+#   meta_name = glue("meta{metalevel}")
+#   
+#   plt = q_plotDR(q_DownsampleSCE(sce_plot,1000),
+#                  color_by = meta_name,
+#                  labelsize = 3)+
+#   ggtitle(label = glue("{meta_name}"))+
+#   theme(plot.title = element_text(hjust = 0.5))
+#   
+#   list3[[meta_name]] = plt
+#   
+# }
+# 
+# png(file = glue("{dir_store}/UMAPs.png"), width=40,height=20,units="in",res=200)
+# grid.arrange(grobs = list3, ncol = 5)
+# dev.off()
+
+
+```
+
+### 3.2) Visualizing FlowSOM clusters on UMAP projection
+
+```{r Visualize FlowSOM clusters on UMAP, message = FALSE, fig.width=14, fig.height=12}
+
+width = 14
+height = 12
+
+width = 14*0.5
+height = 12*0.5
+
+png(file = glue("{dir_store}/UMAP_meta25.png"), width=width,height=height,units="in",res=200)
+q_plotDR(sce,
+         color_by = "meta25",
+         labelsize = 5)
+dev.off()
+
+png(file = glue("{dir_store}/UMAP_facet_stim_meta25.png"), width=24,height=height,units="in",res=200)
+q_plotDR(sce,
+         color_by = "meta25",
+         labelsize = 5,
+         facet_by = "stimulation")
+dev.off()
+
+png(file = glue("{dir_store}/UMAP_clust.png"), width=12,height=5,units="in",res=200)
+plotDR(sce,
+       color_by = features_clustering,
+       ncol = 4)
+dev.off()
+
+width = 5
+height = 4.29
+
+png(file = glue("{dir_store}/UMAP_meta25_nolabel.png"), width=width,height=height,units="in",res=200)
+plotDR(sce,
+         color_by = "meta25")
+dev.off()
+
+
+for(feature in features_clustering){
+  png(file = glue("{dir_store}/UMAP_{feature}.png"), width=width,height=height,units="in",res=200)
+  print(plotDR(sce,
+         color_by = feature))
+  dev.off()
+}
+
+plot_list = list()
+for(feature in c(features_type,features_state)){
+  p = plotDR(sce,
+         color_by = feature,
+         facet_by = "stimulation")
+  plot_list[[feature]] = p
+}
+
+png(file = glue("{dir_store}/UMAP_facet_stim_all.png"), width=14,height=100,units="in",res=200)
+grid.arrange(grobs = plot_list, ncol = 1)
+dev.off()
+
+for(feature in c(features_type,features_state)){
+  png(file = glue("{dir_store}/UMAP_facet_stim_{feature}.png"), width=14,height=12,units="in",res=200)
+  print(plotDR(sce,
+         color_by = feature,
+         facet_by = "stimulation"))
+  dev.off()
+}
+
+
+
+png(file = glue("{dir_store}/density_meta25.png"), width = 16, height = 14, units = "in", res=200)
+plotClusterExprs(sce,
+                 k = "meta25",
+                 features = features_clustering)
+dev.off()
+
+
+```
+
+
+### 3.3) Add manual labels
+
+```{r Load SCE, message = FALSE}
+
+aggregate_labels = readRDS(glue("{dir_project}/2_pipeline/{folder_manualgate}/out/aggregate_labels.rds"))
+manual_labels_SCE = as.factor(aggregate_labels)
+sce$manual_id = manual_labels_SCE
+
+```
+
+
+### 3.4) Visualizing manual labels on UMAP
+
+```{r Add manual cell labels, message = F, fig.width = 20, fig.height = 20}
+
+cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
+width = 14*0.8
+height = 12*0.8
+png(filename = glue("{dir_store}/UMAP_manual.png"),width = width, height = height, units = "in", res = 200)
+q_plotDR(sce,
+         color_by = "manual_id",
+         labelsize = 5,
+         highlight_clust = cell_types_of_interest)
+dev.off()
+
+png(filename = glue("{dir_store}/UMAP_manual_facet_stim.png"),width = 24, height = 12, units = "in", res = 200)
+q_plotDR(sce,
+         color_by = "manual_id",
+         labelsize = 5,
+         highlight_clust = cell_types_of_interest,
+         facet_by = "stimulation")
+dev.off()
+
+cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
+png(filename = glue("{dir_store}/UMAP_manual.png"),width = 14, height = 12, units = "in", res = 200)
+q_plotDR(sce,
+         color_by = "manual_id",
+         labelsize = 5,
+         highlight_clust = cell_types_of_interest)
+dev.off()
+
+```
+
+
+### 3.4) Add boolean matrix of marker positivity
+
+```{r}
+
+boolean_matrix_marker_positivity = read.csv(file = glue("{dir_project}/2_pipeline/6_gateMarkers/out/boolean_matrix_markerpositivity.csv"))[,-1]
+names(boolean_matrix_marker_positivity) = gsub(".$","_pos",names(boolean_matrix_marker_positivity))
+marker_positivity_to_plot = names(boolean_matrix_marker_positivity)[-1]
+new_coldata = cbind(colData(sce),boolean_matrix_marker_positivity)
+sce = scdrake::sce_add_colData(sce, new_coldata, replace = TRUE)
+
+image(as.matrix(boolean_matrix_marker_positivity))
+colnames(boolean_matrix_marker_positivity)
+
+```
+
+### 3.5) Plot UMAP of boolean markers
+
+```{r}
+
+plot_list = list()
+for(color_plot in marker_positivity_to_plot){
+  p = plotDR(sce,
+       color_by = color_plot,
+       facet_by = "stimulation")+
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "#00FF00"))
+  plot_list[[color_plot]] = p
+}
+
+png(file = glue("{dir_store}/UMAP_facet_stim_all_pos.png"), width=14,height=100,units="in",res=200)
+grid.arrange(grobs = plot_list, ncol = 1)
+dev.off()
+
+
+for(color_plot in marker_positivity_to_plot){
+  
+  png(filename = glue("{dir_store}/UMAP_facet_stim_{color_plot}.png"), width=14,height=12,units="in",res=200)
+  print(plotDR(sce,
+       color_by = color_plot,
+       facet_by = "stimulation")+
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "#00FF00")))
+  dev.off()
+  
+}
+
+q_plotDR_shuffled(sce,
+                  color_by = "IFN_pos",
+                  facet_by = "stimulation")
+
+```
+
+### 3.6) Backgroup subtracted (expression)
+
+```{r Make dataframe of sce, message = F}
+
+colData(sce)
+names(cluster_codes(sce))
+assayNames(sce)
+#assay(sce,"exprs")
+rownames(assay(sce,"exprs"))
+colData(sce)$meta25 = cluster_ids(sce,"meta25")
+
+rowsum(colData(sce),group = c("stimulation","meta25"))
+
+df = t(assay(sce,"exprs"))
+df = cbind(df,colData(sce))
+df = data.frame(df)
+head(df)
+colnames(df)
+df$stimulation = factor(df$stimulation,levels = c("NEG","GAG","SEB"))
+
+write.csv(df, file = glue("{dir_out}/dataframe_sce.csv"))
+
+df <- df %>% select(-contains('_pos'))
+
+df_by_meta25_stim = aggregate(. ~ meta25+stimulation, data=df[,!(names(df) %in% c("cluster_id", "manual_id","sample_id"))], FUN=median)
+
+names(df_by_meta25_stim)
+
+df_long = df_by_meta25_stim %>% 
+  pivot_longer(cols = -c(meta25, stimulation), 
+               names_to = "marker",
+               values_to = "value")
+
+df_long = df_long %>% 
+   group_by(meta25) %>% 
+   mutate(value_backgroundsubtracted = value- value[stimulation == "NEG"])
+
+df_long[(df_long$meta25 == 1 & df_long$marker=="IL2"),]
+
+pdf(file = glue("{dir_store}/markers_backgroundsubtracted.pdf"), width = 10,height=90)
+ggplot(df_long, aes(fill=stimulation, y=value_backgroundsubtracted, x=meta25)) + 
+  geom_bar(position="dodge", stat="identity")+
+  facet_wrap(~marker,ncol = 1, scales="free_y")+
+  scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))
+dev.off()
+
+features1 = features_clustering
+features2 = c(features_cytokine_degran,features_chemokineR)
+features3 = features_effectorproteins
+features4 = features_inhibitory
+
+
+```
+
+
+### 2.7) Background subtracted (percent pos)
+
+```{r}
+
+n_cells_sce = nrow(colData(sce))
+n_markers_gated = length(which(grepl(pattern = "*_pos",names(colData(sce)))))-1
+
+# add meta25 to sce
+colData(sce)$meta25 = cluster_ids(sce, "meta25")
+
+# make dataframe from sce coldata (rows = n cells in sce)
+df = data.frame(colData(sce)[,!(names(colData(sce)) %in% c("cluster_id", "manual_id","sample_id","roo_pos"))])
+
+#check lenght of df
+nrow(df) == n_cells_sce
+
+# make the df long format (rows = n cells in sce * 18 gated markers = 2,472,912)
+df_long = df %>% 
+  pivot_longer(cols = -c(meta25, stimulation), 
+               names_to = "marker",
+               values_to = "pos")
+# check lenght
+nrow(df_long) == nrow(colData(sce))*18
+
+# group by meta25, stimulation, and marker and get number of positive cells
+counts_pos = df_long %>% 
+  group_by(meta25, stimulation,marker) %>% 
+  summarise(
+    n_pos = sum(pos))
+
+# group by meta25 and stimulation to get number of cells per cluster per stimulation
+counts_cluster = df %>% 
+  group_by(meta25, stimulation) %>% 
+  tally()
+
+# check the sum is equal to n cells in sce
+sum(counts_cluster$n) == n_cells_sce
+
+# check visually that the cluster sizes per stimulation are correct
+# ggplot(counts_cluster,
+#        aes(x=meta25,y=n,group = stimulation,fill=stimulation))+
+#   geom_bar(position="dodge", stat="identity")
+# 
+# plotCounts(sce, group_by = "meta25", color_by = "stimulation", prop = FALSE)+
+#   scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))+
+#   scale_x_continuous(breaks = c(1:25))
+
+# combine the counts of positive cells with the cluster sizes (nrow = 25 * 3* 18)
+df_counts = counts_pos %>% right_join(counts_cluster, by=c("meta25","stimulation"))
+# check lenght 
+nrow(df_counts) == 25*3*18
+# calculate pers_pos
+df_counts$perc_pos = (df_counts$n_pos/df_counts$n)*100
+
+# subtract negative value for same cluster and same marker
+df_final = df_counts %>% 
+   group_by(meta25) %>% 
+   mutate(perc_pos_backgroundsubtracted = perc_pos- perc_pos[stimulation == "NEG"])
+
+# check all negative are 0
+sum(df_final[df_final$stimulation=="NEG","perc_pos_backgroundsubtracted"])
+
+# remove all stimulation == NEG
+df_final = df_final[df_final$stimulation!="NEG",]
+
+# pdf(file = glue("{dir_store}/percpos_backgroundsubtracted.pdf"), width = 10,height=90)
+# ggplot(df_final, aes(fill=stimulation, y=percpos_backgroundsubtracted, x=meta25)) + 
+#   geom_bar(position="dodge", stat="identity")+
+#   facet_wrap(~marker,ncol = 1, scales="free_y")+
+#   scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))+scale_y_continuous(trans=scales::pseudo_log_trans(base = 10))
+# dev.off()
+
+# recalculate number of positive cells by multiplying per_pos with n cells (--> gets a result relative to cluster size)
+df_final$n_pos_backgroundsubtracted = (df_final$perc_pos_backgroundsubtracted/100)*df_final$n
+
+# set negative values to zero (if not, the pie chart looks weird with blank space)
+df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)
+
+# df_final[(df_final$meta25==16 & df_final$marker %in% c("CD107a_pos","IFN_pos","TNF_pos")),c("meta25","stimulation","marker","n","n_pos","perc_pos","perc_pos_backgroundsubtracted","n_pos_backgroundsubtracted")]
+
+# ggplot(df_final[(df_final$marker %in% c("TNF_pos","IFN_pos","CD107a_pos")&df_final$stimulation=="GAG"),], 
+#        aes(fill=stimulation,
+#            y=n_pos_backgroundsubtracted, 
+#            x=meta25)) + 
+#   geom_bar(position="dodge", 
+#            stat="identity",
+#            show.legend=F)+
+#   facet_wrap(~marker,
+#              ncol = 3, 
+#              scales="free_y",
+#              labeller = as_labeller(c("CD107a_pos" = "CD107a",
+#                                     "IFN_pos" = "IFN",
+#                                     "TNF_pos" = "TNF")))+
+#   scale_fill_manual(values = c("GAG" = "red"))+
+#   ylab("Percentage positive cells in cluster (NEG stimulation subtracted)")+
+#   theme_minimal()
+# 
+# df_plot = df_final[(df_final$marker %in% c("TNF_pos")&df_final$stimulation=="GAG"),c("meta25","n_pos_backgroundsubtracted")]
+# df_plot$n_pos_backgroundsubtracted = as.numeric(df_plot$n_pos_backgroundsubtracted)
+# 
+# ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
+#   geom_bar(width = 1, stat = "identity")+
+#   coord_polar("y", start=0)+
+#   theme_minimal()+
+#   scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])
+
+# define markers to plot
+markers_to_plot = c("TNF_pos","IFN_pos","CD107a_pos")
+df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
+
+# transform n_pos_backgroundsubtracted to a percentage 
+df_plot = df_plot %>% group_by(marker) %>%
+  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+
+# # get positions for labels
+# df2 <- df_plot %>% 
+#   mutate(csum = rev(cumsum(rev(percentage))), 
+#          pos = percentage/2 + lead(csum, 1),
+#          pos = if_else(is.na(pos), percentage/2, pos))
+
+# TODO: below 10 % --> group together in other (describe what's in other)
+png(filename = glue("{dir_store}/pie_charts.png"),height = 10,width = 20,units = "in",res = 300)
+ggplot(df_plot, aes(x="", y=percentage, fill=meta25))+
+  geom_bar(width = 1, stat = "identity")+
+  facet_wrap(~marker)+
+  # geom_label_repel(data = df2,
+  #                  aes(y = pos, label = glue("meta{meta25} ({round(percentage,2)} %)")),
+  #                  size = 3, nudge_x = 1, show.legend = FALSE) +
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+  blank_theme+theme(axis.text.x=element_blank())
+dev.off()
+
+
+blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank()
+  )
+
+```
+
+
+## 4) Plot expression
+
+```{r Marker expression between conditions, message = F}
+
+palette = values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049")
+features1 = features_clustering
+features2 = c(features_cytokine_degran,features_chemokineR)
+features3 = features_effectorproteins
+features4 = features_inhibitory
+
+png(filename = glue("{dir_store}/markerexpr_clustering.png"),width = 12, height = 6,unit = "in",res = 300)
+plotPbExprs(sce,
+            k = "meta25",
+            features = features1,
+            facet_by = "antigen",
+            color_by = "stimulation",
+            group_by = "cluster_id",
+            geom = "point",
+            jitter=F)+
+  scale_color_manual(values = palette)+
+  ggtitle(label = "Markers used for clustering")
+dev.off()
+
+png(filename = glue("{dir_store}/markerexpr_cytokines_chemokines.png"),width = 12, height = 10,unit = "in",res = 300)
+plotPbExprs(sce,
+            k = "meta25",
+            features = features2,
+            facet_by = "antigen",
+            color_by = "stimulation",
+            group_by = "cluster_id",
+            geom = "point",
+            jitter=F)+
+  scale_color_manual(values = palette)+
+  ggtitle(label = "Cytokines and chemokines")
+dev.off()
+
+png(filename = glue("{dir_store}/markerexpr_effectormolecules.png"),width = 8, height = 6,unit = "in",res = 300)
+plotPbExprs(sce,
+            k = "meta25",
+            features = features3,
+            facet_by = "antigen",
+            color_by = "stimulation",
+            group_by = "cluster_id",
+            geom = "point",
+            jitter=F)+
+  scale_color_manual(values = palette)+
+  ggtitle(label = "Effector molecules")
+dev.off()
+
+png(filename = glue("{dir_store}/markerexpr_inhibmolecules.png"),width = 12, height = 4,unit = "in",res = 300)
+plotPbExprs(sce,
+            k = "meta25",
+            features = features4,
+            facet_by = "antigen",
+            color_by = "stimulation",
+            group_by = "cluster_id",
+            geom = "point",
+            jitter=F)+
+  scale_color_manual(values = palette)+
+  ggtitle(label = "Inhibitory molecules")
+dev.off()
+
+
+```
+
+## 5) Save flowSet with cluster ids
+
+```{r save flowSet, message = F}
+
+colData(sce)
+colData(sce)$meta25 = cluster_ids(sce,"meta25")
+colData(sce)
+fs_clust = sce2fcs(sce, 
+                   split_by = "sample_id", 
+                   keep_cd = T, 
+                   keep_dr = F, 
+                   assay = "exprs")
+
+#flowCore::fr_append_cols(ff_o, m)
+
+saveRDS(fs_clust, glue("{dir_out}/flowSet_clust.rds"))
+
+```
+
+```{r Extract clusters, message=FALSE}
+
+sce_NEG = filterSCE(sce,
+                    stimulation == "NEG")
+
+sce_GAG = filterSCE(sce,
+                    stimulation == "GAG")
+
+sce_SEB = filterSCE(sce,
+                    stimulation == "SEB")
+
+extractClusters(sce_NEG,
+                                 k = "meta25",
+                                 clusters = as.character(1),
+                                 as = "flowSet")
+
+ei(sce)
+# extractClusters does not conserve the file ID
+my_list = list()
+list_clusters = list()
+for(stim in c(ei(sce)$stimulation)){
+  
+  print(stim)
+  sce_filtered = filterSCE(sce,
+                           stimulation == stim)
+  
+  for(cluster_no in c(1:25)){
+    
+    name_metacluster = glue("meta{cluster_no}")
+    name_flowSet = glue("flowSet_{name_metacluster}")
+    
+    fs_cluster = extractClusters(sce_filtered,
+                                 k = "meta25",
+                                 clusters = as.character(cluster_no),
+                                 as = "flowSet",
+                                 verbose = F)
+    
+    list_clusters[[name_metacluster]] = fs_cluster
+  
+  }
+  
+  my_list[[stim]] = list_clusters
+
+}
+
+
+saveRDS(my_list, file = glue("{dir_out}/list_flowSets.rds"))
+
+```
+
+# PROJECT DESCRIPTION FIG
+
+```{r Figure for PhD, message = F}
+cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
+blank_theme <- theme_minimal()+
+  theme(
+  axis.title.x = element_blank(),
+  axis.title.y = element_blank(),
+  panel.border = element_blank(),
+  panel.grid=element_blank(),
+  axis.ticks = element_blank()
+  )
+
+
+fig1a = q_plotDR(sce,
+                 color_by = "manual_id",
+                 labelsize = 3,
+                 highlight_clust = cell_types_of_interest)+ 
+  guides(color=guide_legend(title="Manual gating",override.aes = list(size = 4)))
+
+
+fig1b = q_plotDR(sce,
+                 color_by = "meta25",
+                 labelsize = 3)+ 
+  guides(color=guide_legend(title="FlowSOM metacluster",override.aes = list(size = 4)))
+
+
+
+fig1c = plotDR(sce,
+               color_by = features_clustering,
+               ncol = 2)
+
+fig1d = plotDR(filterSCE(sce,
+                         stimulation != "SEB"),
+               color_by = "IFN_pos",
+               facet_by = "stimulation",
+               ncol = 2)+
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red"))+
+  guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
+
+fig1d_alt = q_plotDR_shuffled(filterSCE(sce,
+                         stimulation != "SEB"),
+               color_by = "IFN_pos",
+               facet_by = "stimulation",
+               ncol = 1)+
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red"))+
+  guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
+
+fig1d_alt$layers[[1]]$aes_params$size = 0.005
+
+markers_to_plot = c("IFN_pos")
+df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
+
+# transform n_pos_backgroundsubtracted to a percentage 
+df_plot = df_plot %>% group_by(marker) %>%
+  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+
+df_plot$marker = factor(df_plot$marker,levels = c("IFN_pos","TNF_pos","CD107a_pos"))
+
+fig1e = print(ggplot(df_plot, 
+               aes(x="", 
+                   y=percentage, 
+                   fill=meta25))+
+  geom_bar(width = 1, stat = "identity")+
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+  blank_theme+theme(axis.text.x=element_blank())+
+    guides(fill=guide_legend(title="FlowSOM metacluster",override.aes = list(size = 4))))
+
+markers_to_plot = c("IFN_pos","TNF_pos","CD107a_pos")
+df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
+
+# transform n_pos_backgroundsubtracted to a percentage 
+df_plot = df_plot %>% group_by(marker) %>%
+  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+
+fig1e_alt = print(ggplot(df_plot, 
+                         aes(x="", 
+                             y=percentage, 
+                             fill=meta25))+
+                    geom_bar(width = 1, stat = "identity")+
+                    facet_wrap(~marker,
+                               ncol = 1,
+                               labeller = as_labeller(c("CD107a_pos" = "CD107a",
+                                                        "IFN_pos" = "IFN",
+                                                        "TNF_pos" = "TNF")))+
+                    scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+                    blank_theme+theme(axis.text.x=element_blank(),legend.position = "none"))
+
+# design <- "
+# AAAABBBB
+# AAAABBBB
+# CCCCDDDD
+# CCCCDDDD
+# CCCCEEE#
+# CCCCEEE#
+# "
+# png(filename = glue("{dir_out}/Figure1.png"), width = 16,height = 15,unit = "in",res = 300)
+# fig1a + fig1b + fig1c + fig1d + fig1e + plot_layout(design = design)+ plot_annotation(tag_levels = 'A')&theme(plot.tag = element_text(size = 20, face = 'bold'))
+# dev.off()
+
+
+design <- "
+AAAAABBBBB
+AAAAABBBBB
+AAAAABBBBB
+CCCCCDDDEE
+CCCCCDDDEE
+CCCCCDDDEE
+CCCCCDDDEE
+"
+
+fig1a$layers[[1]]$aes_params$size = 0.005
+fig1b$layers[[1]]$aes_params$size = 0.005
+fig1c$layers[[1]]$aes_params$size = 0.000000001
+fig1d_alt$layers[[1]]$aes_params$size = 0.000000001
+
+
+png(filename = glue("{dir_out}/Figure1_alt.png"), width = 16,height = 15,unit = "in",res = 300)
+fig1a + fig1b + fig1c + fig1d_alt + fig1e_alt + plot_layout(design = design)+ plot_annotation(tag_levels = 'A')&theme(plot.tag = element_text(size = 20, face = 'bold'))
+dev.off()
+
+```
+
+
+## 6) Session info
+
+```{r Session info, message = TRUE}
+
+sessionInfo()
+
+```

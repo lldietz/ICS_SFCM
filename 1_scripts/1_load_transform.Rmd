@@ -1,0 +1,157 @@
+---
+title: "Load and transform"
+author: "*Lisa Loksø Dietz*"
+date: "*`r format(Sys.time(), '%Y-%m-%d')`*"
+knit: (function(inputFile, encoding) { 
+      out_dir = paste0(dirname(getwd()),"/3_output");
+      rmarkdown::render(inputFile,
+                        encoding=encoding, 
+                        output_file=file.path(out_dir, '1_load_transform.html')) })
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 4
+    toc_collapsed: true
+    code_folding: show
+---
+
+```{r Markdown setup 1, include = FALSE}
+
+knitr::opts_chunk$set(fig.width=10, fig.height=7, out.width = "70%",fig.align = 'center', eval=FALSE, root.dir = getwd()) 
+
+```
+
+## 0) Load source and set dir
+
+```{r Directories, message = FALSE, warning = FALSE}
+
+rm(list=ls())
+setwd(dirname(rstudioapi::getActiveDocumentContext()$path))
+source("0_source.R")
+
+```
+
+## 1) Unmixed data
+
+
+### 1.1) Read unmixed fcs files
+
+```{r Read reshuffled fcs files, message = FALSE}
+
+fcs_dir = glue("{dir_project}/0_data/FCS_unmixed")
+
+fs = read.flowSet(path=fcs_dir, 
+                      pattern="*.fcs", 
+                      transformation = FALSE, 
+                      truncate_max_range = FALSE)
+
+```
+
+### 1.3) Experimental info
+
+```{r}
+
+fs = q_AddExperimentInfo(fs)
+
+# add metadata to the fs
+pData(fs)$sample_id = c("ROADMAP_A02","ROADMAP_A02","ROADMAP_A02")
+pData(fs)$stimulation = c("GAG", "NEG", "SEB")
+
+pData(fs)
+
+```
+
+
+## 2) Define panel
+
+```{r Panel, message = FALSE}
+
+type_markers = c("CD14_16","CD19","CD3","CD4","CD8","CD45RA","CCR7","CD27","CD95","FoxP3")
+state_markers = c("TIGIT","PD1","CD39","CCR4","CXCR5","CD107a","IFN","TNF","IL2","IL4-13","Perforin","GzmB","GzmK","Granulysin","Tbet","TCF1","Ki67")
+
+panel = q_DefinePanel(fs, type_markers, state_markers)
+
+write.csv(panel, file=glue("{dir_out}/Panel.csv"))
+panel = read.csv(file=glue("{dir_out}/Panel.csv"))[,-1]
+kable(panel)
+
+```
+
+## 3) Transformation
+
+### 3.1) Define markers
+
+```{r Markers to transform, message=FALSE}
+
+markerstotransform = panel[!is.na(panel$antigen), ]$fcs_colname
+
+```
+
+### 3.2) estimateLogicle
+
+```{r Make transformation with estimateLogicle, message=FALSE}
+
+set.seed(1234)
+max_value = max(fsApply(fs, each_col, max))
+# choose sample for trans
+trans = estimateLogicle(fs[[1]],
+                        channels = markerstotransform)
+
+```
+
+### 3.3) Transform data
+
+```{r Transform data, message=FALSE}
+
+fs_transform = transform(fs, trans)
+fs_transform = q_PrefixSuffixSampleNames(fs_transform, "suffix", "_tf")
+
+```
+
+### 3.4) Save and load transformed
+
+```{r Save RDS, message = FALSE}
+
+saveRDS(fs_transform, file = glue("{dir_out}/FlowSet_transform.rds"))
+write.flowSet(fs_transform, 
+              outdir=glue("{dir_store}/FCS_transformed"))
+
+```
+
+```{r Read RDS, message = FALSE}
+
+fs_transform = readRDS(file = glue("{dir_out}/FlowSet_transform.rds"))
+
+```
+
+### 3.4) Check transformation
+
+```{r Density plot before and after trans, message=FALSE}
+
+flowViz.par.set(theme = theme_minimal())
+pdf(file = glue("{dir_store}/Transformation_BeforeAfter.pdf"), width = 20, height = 18)
+q_densityplot(~`.`, 
+             channels = markerstotransform, 
+             fs[[1]],
+             main = "Before transformation",
+             fill = "#0047AB")
+
+
+q_densityplot(~`.`, 
+             channels = markerstotransform, 
+             fs_transform[[1]],
+             main = "After transformation",
+             fill = "#0047AB")
+dev.off()
+
+
+```
+
+## 6) Session info
+
+```{r Session info, message = TRUE}
+
+sessionInfo()
+
+```
