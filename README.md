@@ -120,7 +120,7 @@ The PeacoQC algorithm created QC fcs files, which can be read back into RStudio 
 
 **Figure 7: Gating strategy of manual gating**
 
-![alt text](assets/gatingtree_celltype.png){ width=80% }
+![alt text](assets/gatingtree_celltypes.png){ width=80% }
 
 **Figure 8: Gating tree of manual gating**. 
 
