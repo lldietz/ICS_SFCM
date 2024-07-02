@@ -32,7 +32,7 @@ But first, please read the good practices below to ensure quality and safety:
 3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitHub (add the folder to a `.gitignore` file; see section 2.1)
 4)  Follow the core principles below:
 
-![alt text](3_results/project_structure.png){width="70%"}
+<img src="3_results/project_structure.png" width="70%"/>
 
 **Figure 1: Core principles of project structure for coherent data analysis pipelines**. Created with BioRender.com. Adapted from <https://towardsdatascience.com/how-to-keep-your-research-projects-organized-part-1-folder-structure-10bd56034d3a>
 
@@ -71,7 +71,7 @@ The first step of data analysis is importing the unmixed FCS files into R. The *
 2.  Annotation for the parameters (e.g., measurement channels, stains, dynamic range)
 3.  Additional annotation provided through keywords in the .fcs file
 
-![alt text](3_results/flowSet.png)
+<img src="3_results/flowSet.png" width="100%"/>
 
 **Figure 2: Import FCS files as a flowSet in RStudio**. Created with BioRender.com. Adapted from <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-106>.
 
@@ -83,9 +83,9 @@ As the physical process of exciting, emitting and detecting fluorescence signals
 
 Below are all markers before and after transformation:
 
-![alt text](3_results/transform_before.png)
+<img src="3_results/transform_before.png" width="90%"/>
 
-![alt text](3_results/transform_after.png)
+<img src="3_results/transform_after.png" width="90%"/>
 
 **Figure 3: Before and after transformation**.
 
@@ -95,7 +95,7 @@ Below are all markers before and after transformation:
 
 The second step of data analysis is pregating. Here cells are gated for lymphocytes → single cells → live cells → dump- cells → CD19-CD13+ cells:
 
-![alt text](3_results/gatingscheme_pregating.png)
+<img src="3_results/gatingscheme_pregating.png" width="100%"/>
 
 **Figure 4: Gating strategy for pregating**.
 
@@ -116,7 +116,7 @@ Automatic quality control is performed using the **PeacoQC** package for removal
 
 An overview of the PeacoQC algorithm is shown below:
 
-![alt text](3_results/peacoQC.jpg)
+\<img src="3_results/peacoQC.jpg)
 
 **Figure 5: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
 
@@ -130,9 +130,9 @@ Manual gating to identify T cell subsets is done using CytoExploreR. A GatingSet
 
 The gating strategy is shown below:
 
-![alt text](3_results/gatingtree_celltypes.png){width="80%"}
+<img src="3_results/gatingtree_celltypes.png" width="72%"/>
 
-![alt text](3_results/gatingscheme_celltype.png)
+<img src="3_results/gatingscheme_celltype.png" width="100%"/>
 
 **Figure 6: Gating strategy of manual gating**
 
@@ -146,7 +146,7 @@ Gates for marker positivity are drawn using CytoExploreR. A gatingSet is again c
 
 Below is an example of the gate for IFN faceted by stimulation:
 
-![alt text](3_results/gatesMarkers_IFN.png)
+<img src="3_results/gatesMarkers_IFN.png" width="100%"/>
 
 **Figure 7: Example of gating for IFN**
 
@@ -154,7 +154,7 @@ Using the function `q_Gating_matrix_aggregates` we can get a **boolean matrix of
 
 The matrix looks like this:
 
-![alt text](3_results/boolean_matrix.png)
+<img src="3_results/boolean_matrix.png" width="100%"/>
 
 ### Step G: Clustering and dimensionality reduction
 
@@ -162,8 +162,20 @@ The matrix looks like this:
 
 To cluster and reduce the dimensions of our flowSet, we first need to convert it to a Single Cell Experiment (SCE). This is done with the `prep_data` function from **CATALYST**. The architecture of a SCE is shown below:
 
-![alt text](3_results/sce.png)
+<img src="3_results/sce.png" width="100%"/>
 
 **Figure 8: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
 
 In colData(sce), the columns **manual_id** and **IFN_pos** are highlighted in light yellow. These are the results of steps E and F.
+
+FlowSOM clustering and dimensionality reduction (UMAP) of the data is done with the `cluster` function and `runDR` functions from **CATALYST**. Afterwards, FlowSOM clusters, manual cell labels or marker positivity can be plotted on the UMAP using the `plotDR` function from **CATALYST**:
+
+<img src="3_results/UMAP_meta25.png" width="40%"/>
+
+<img src="3_results/UMAP_manual.png" width="40%"/>
+
+<img src="3_results/UMAP_facet_stim_TNF_pos.png" width="100%"/>
+
+#### Subtracting background (NEG) from signal per marker per cluster
+
+<img src="3_results/clusterdistribution_marker_pies.png" width="100%"/>
