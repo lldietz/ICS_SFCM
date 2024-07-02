@@ -27,9 +27,9 @@ But first, please read the good practices below to ensure quality and safety:
 
 ## 2) Good practices
 
-1)  Do **not** share data on GitLab, only code
+1)  Do **not** share data on GitHub, only code
 2)  Do **not** share personal information (e.g. AUID in path to your data files - instead, use relative paths)
-3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitLab (add the folder to a `.gitignore` file; see section 2.1)
+3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitHub (add the folder to a `.gitignore` file; see section 2.1)
 4)  Follow the core principles below:
 
 ![alt text](3_results/project_structure.png){width="70%"}
@@ -45,7 +45,7 @@ But first, please read the good practices below to ensure quality and safety:
 5)  If the file/folder you want not to be ignored by Git (i.e. not uploaded) is not present in the .gitignore file, write `echo 'FILENAME/FOLDERNAME' >> .gitignore`
 6)  Check contents of the .gitignore file (see step 4) to confirm the filename or foldername was added successfully
 
-Now anything listed in the .gitignore file will be ignored by GitLab and therefore not uploaded.
+Now anything listed in the .gitignore file will be ignored by GitHub and therefore not uploaded.
 
 ## 3) Data analysis
 
@@ -136,7 +136,7 @@ The gating strategy is shown below:
 
 **Figure 6: Gating strategy of manual gating**
 
-The cell labels obtained from manual gating can be converted into a vector of labels using the `q_Gating_matrix_aggregates` function in the `0_source` file. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
+The cell labels obtained from manual gating can be converted into a **vector of cell labels** using the `q_Gating_matrix_aggregates` function in the `0_source` file. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
 
 ### Step F: Gate marker positivity
 
@@ -150,7 +150,7 @@ Below is an example of the gate for IFN faceted by stimulation:
 
 **Figure 7: Example of gating for IFN**
 
-Using the function `q_Gating_matrix_aggregates` we can get a boolean matrix of TRUE/FALSE for marker positivity for all cells in the flowSet/gatingSet. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of marker positivity on a UMAP.
+Using the function `q_Gating_matrix_aggregates` we can get a **boolean matrix of TRUE/FALSE for marker positivity** for all cells in the flowSet/gatingSet. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of marker positivity on a UMAP.
 
 The matrix looks like this:
 
@@ -160,7 +160,10 @@ The matrix looks like this:
 
 **File to use**: `1_scripts/6_dimred_clustering.Rmd`
 
+To cluster and reduce the dimensions of our flowSet, we first need to convert it to a Single Cell Experiment (SCE). This is done with the `prep_data` function from **CATALYST**. The architecture of a SCE is shown below:
 
+![alt text](3_results/sce.png)
 
+**Figure 8: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
 
-
+In colData(sce), the columns **manual_id** and **IFN_pos** are highlighted in light yellow. These are the results of steps E and F.

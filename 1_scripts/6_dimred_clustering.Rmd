@@ -102,6 +102,9 @@ assayNames(sce)[1] = "exprs"
 saveRDS(sce, file = glue("{dir_store}/sce.rds"))
 sce = readRDS(file = glue("{dir_store}/sce.rds"))
 
+
+rowData(sce)
+colData(sce)
 sce
 
 
