@@ -170,9 +170,7 @@ In colData(sce), the columns **manual_id** and **IFN_pos** are highlighted in li
 
 FlowSOM clustering and dimensionality reduction (UMAP) of the data is done with the `cluster` function and `runDR` functions from **CATALYST**. Afterwards, FlowSOM clusters, manual cell labels or marker positivity can be plotted on the UMAP using the `plotDR` function from **CATALYST**:
 
-<img src="3_results/UMAP_meta25.png" width="40%"/>
-
-<img src="3_results/UMAP_manual.png" width="40%"/>
+<img src="3_results/UMAP_meta25.png" width="40%"/> <img src="3_results/UMAP_manual.png" width="40%"/>
 
 <img src="3_results/UMAP_facet_stim_TNF_pos.png" width="100%"/>
 
