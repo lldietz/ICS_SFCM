@@ -378,3 +378,79 @@ q_Gating_matrix_aggregates = function(flowSet, gatingTemplate,...){
   
 }
 
+# TODO: find better column names for the dataframe created (to make more intuitive)
+q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust = function(sce,k,condition_col,background_value){
+  
+  n_cells_sce = nrow(colData(sce))
+  colnames_marker_pos = setdiff(names(colData(sce))[grep(pattern = "*_pos",names(colData(sce)))],c("roo_pos","root_pos"))
+  n_markers_gated = length(colnames_marker_pos)
+  n_conditions = length(unique(colData(sce)[[condition_col]]))
+  metaname = k
+  n_metaclusters = length(unique(colData(sce)[[metaname]]))
+  
+  # add meta25 to sce
+  colData(sce)[metaname] = cluster_ids(sce, metaname)
+  
+  # make dataframe from sce coldata (rows = n cells in sce)
+  df = data.frame(colData(sce)[,(names(colData(sce)) %in% c(condition_col,metaname,colnames_marker_pos))])
+  
+  #check lenght of df
+  stopifnot(nrow(df) == n_cells_sce)
+  
+  # make the df long format (rows = n cells in sce * 18 gated markers = 2,472,912)
+  df_long = df %>% 
+    pivot_longer(cols = -c(metaname, condition_col), 
+                 names_to = "marker",
+                 values_to = "pos")
+  # check lenght
+  stopifnot(nrow(df_long) == nrow(colData(sce))*n_markers_gated)
+  
+  # get number of positive cells
+  counts_pos = df_long %>% 
+    group_by(!!! rlang::syms(metaname),!!! rlang::syms(condition_col),marker) %>% 
+    summarise(
+      n_pos = sum(pos))
+  
+  # get cluster sizes
+  cluster_sizes = df %>% 
+    group_by(!!! rlang::syms(metaname),!!! rlang::syms(condition_col)) %>% 
+    tally()
+  
+  # check the sum is equal to n cells in sce
+  stopifnot(sum(cluster_sizes$n) == n_cells_sce)
+  
+  # combine the counts of positive cells with the cluster sizes 
+  df_counts = counts_pos %>% right_join(cluster_sizes, by=c(metaname,condition_col))
+  
+  # check lenght 
+  stopifnot(nrow(df_counts) == n_conditions*n_markers_gated*n_metaclusters)
+  
+  # calculate pers_pos
+  df_counts$perc_pos = (df_counts$n_pos/df_counts$n)*100
+  
+  # subtract negative value per cluster and marker (TODO: FIX!!!)
+  df_final = df_counts %>%
+    group_by(!!! rlang::sym(metaname)) %>%
+    mutate(perc_pos_backgroundsubtracted = perc_pos - perc_pos[get({{condition_col}}) == background_value])
+  
+  # check all negative are 0
+  stopifnot(sum(df_final[df_final[condition_col] == background_value,"perc_pos_backgroundsubtracted"])==0)
+  
+  # remove all stimulation == NEG
+  df_final = df_final[df_final[condition_col]!=background_value,]
+  
+  # recalculate number of positive cells by multiplying per_pos with n cells (--> gets a result relative to cluster size)
+  df_final$n_pos_backgroundsubtracted = (df_final$perc_pos_backgroundsubtracted/100)*df_final$n
+  
+  # set negative values to zero (if not, the pie chart looks weird with blank space)
+  df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)
+  
+  # calculate the cluster distribution for each marker and stimulation
+  dataframe = df_final %>% 
+    group_by(!!! rlang::syms(condition_col), marker) %>%
+    mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+  
+  
+  return(dataframe)
+  
+}

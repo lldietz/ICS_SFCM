@@ -38,7 +38,6 @@ source("0_source.R")
 
 ### 1.1) Cleaned flowSet
 
-
 ```{r Read files, message = FALSE}
 
 read_dir = glue("{dir_project}/2_pipeline/{folder_QC}/out")
@@ -75,9 +74,9 @@ total_markers = length(channels_sce)
 
 ```
 
-## 2) Clustering and visualization
+## 2) Clustering and dimensionality reduction
 
-### 2.1) Single Cell Experiment (SCE)
+### 2.1) Create Single Cell Experiment (SCE)
 
 ```{r Create SCE, message = FALSE}
 
@@ -139,8 +138,7 @@ sce
 
 ```
 
-
-### 2.4) Dimensionality reduction (UMAP)
+### 2.4) Dimensionality reduction
 
 ```{r Run dimensionality reduction, message = FALSE}
 
@@ -152,9 +150,7 @@ sce = runDR(sce,
 
 ```
 
-
-
-### 2.5) Save and read dimred SCE 
+### 2.5) Save and read dimred SCE
 
 ```{r Save SCE, message = FALSE}
 
@@ -164,11 +160,9 @@ sce$stimulation = factor(sce$stimulation,levels = c("NEG", "GAG", "SEB"))
 
 ```
 
+## 3) UMAP visualisations
 
-## 3) Cluster visualization
-
-
-### 3.1) Visualizing FlowSOM clusters 
+### 3.1) FlowSOM clusters
 
 ```{r Visualize FlowSOM clusters on UMAP, message = FALSE, fig.width=14, fig.height=12}
 
@@ -239,8 +233,7 @@ dev.off()
 
 ```
 
-
-### 3.2) Cell types (manual gating)
+### 3.2) Manual cell types
 
 #### 3.2.1) Import aggregate labels
 
@@ -284,17 +277,17 @@ dev.off()
 
 ```
 
-
-### 3.3) Boolean matrix of marker positivity
+### 3.3) Marker positivity
 
 #### 3.3.1) Import boolean matrix
 
 ```{r import matrix, message=F}
+
 boolean_matrix_marker_positivity = read.csv(file = glue("{dir_project}/2_pipeline/{folder_marker}/out/boolean_matrix_marker+.csv"))[,-1]
 names(boolean_matrix_marker_positivity) = gsub(".$","_pos",names(boolean_matrix_marker_positivity))
 marker_positivity_to_plot = names(boolean_matrix_marker_positivity)[-1]
-```
 
+```
 
 #### 3.3.2) Add to colData(sce)
 
@@ -308,7 +301,7 @@ colnames(boolean_matrix_marker_positivity)
 
 ```
 
-#### 3.3.1) Plot UMAP of boolean markers
+#### 3.3.1) Plot marker positivity
 
 ```{r}
 
@@ -339,168 +332,133 @@ for(color_plot in marker_positivity_to_plot){
 
 ```
 
+#### 3.3.2) Weighted marker positivity (background subtracted)
 
-#### 3.3.2) Background subtracted (percent pos)
+```{r Weighted positivity, message=FALSE}
 
-```{r}
+dataframe = q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust(sce,
+                                                            k = "meta25",
+                                                            condition_col = "stimulation",
+                                                            background_value = "NEG")
 
-n_cells_sce = nrow(colData(sce))
-n_markers_gated = length(which(grepl(pattern = "*_pos",names(colData(sce)))))-1
+dataframe$marker = gsub("_pos","",dataframe$marker)
 
-# add meta25 to sce
-colData(sce)$meta25 = cluster_ids(sce, "meta25")
+df_plot =  dataframe[(dataframe$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
 
-# make dataframe from sce coldata (rows = n cells in sce)
-df = data.frame(colData(sce)[,!(names(colData(sce)) %in% c("cluster_id", "manual_id","sample_id","roo_pos"))])
+require(plyr)
+n_labels <- ddply(.data=df_plot, 
+                 .(marker), 
+                 summarize, 
+                 n=paste("n =", round(sum(n_pos_backgroundsubtracted))))
 
-#check lenght of df
-nrow(df) == n_cells_sce
+png(filename = glue("{dir_project}/3_results/clusterdistribution_marker_pies.png"), height = 15,width = 15,unit = "in",res=300)
+ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
+  geom_bar(width = 1, stat = "identity")+
+  facet_wrap(~marker,scales="free")+
+  geom_text(data=n_labels,inherit.aes=FALSE, parse=FALSE,aes(x=-.3, y=0,label = n))+
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+  blank_theme+theme(axis.text.x=element_blank())+
+  ggtitle(label = "Distribution of FlowSOM clusters among positive cells")
+dev.off()
 
-# make the df long format (rows = n cells in sce * 18 gated markers = 2,472,912)
-df_long = df %>% 
-  pivot_longer(cols = -c(meta25, stimulation), 
-               names_to = "marker",
-               values_to = "pos")
-# check lenght
-nrow(df_long) == nrow(colData(sce))*18
-
-# group by meta25, stimulation, and marker and get number of positive cells
-counts_pos = df_long %>% 
-  group_by(meta25, stimulation,marker) %>% 
-  summarise(
-    n_pos = sum(pos))
-
-# group by meta25 and stimulation to get number of cells per cluster per stimulation
-counts_cluster = df %>% 
-  group_by(meta25, stimulation) %>% 
-  tally()
-
-# check the sum is equal to n cells in sce
-sum(counts_cluster$n) == n_cells_sce
-
-# check visually that the cluster sizes per stimulation are correct
-# ggplot(counts_cluster,
-#        aes(x=meta25,y=n,group = stimulation,fill=stimulation))+
-#   geom_bar(position="dodge", stat="identity")
-# 
-# plotCounts(sce, group_by = "meta25", color_by = "stimulation", prop = FALSE)+
-#   scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))+
-#   scale_x_continuous(breaks = c(1:25))
-
-# combine the counts of positive cells with the cluster sizes (nrow = 25 * 3* 18)
-df_counts = counts_pos %>% right_join(counts_cluster, by=c("meta25","stimulation"))
-# check lenght 
-nrow(df_counts) == 25*3*18
-# calculate pers_pos
-df_counts$perc_pos = (df_counts$n_pos/df_counts$n)*100
-
-# subtract negative value for same cluster and same marker
-df_final = df_counts %>% 
-   group_by(meta25) %>% 
-   mutate(perc_pos_backgroundsubtracted = perc_pos- perc_pos[stimulation == "NEG"])
-
-# check all negative are 0
-sum(df_final[df_final$stimulation=="NEG","perc_pos_backgroundsubtracted"])
-
-# remove all stimulation == NEG
-df_final = df_final[df_final$stimulation!="NEG",]
-
-# pdf(file = glue("{dir_store}/percpos_backgroundsubtracted.pdf"), width = 10,height=90)
-# ggplot(df_final, aes(fill=stimulation, y=percpos_backgroundsubtracted, x=meta25)) + 
-#   geom_bar(position="dodge", stat="identity")+
-#   facet_wrap(~marker,ncol = 1, scales="free_y")+
-#   scale_fill_manual(values = c("NEG" = "grey70", "GAG" = "#0bb4ff","SEB"="#e60049"))+scale_y_continuous(trans=scales::pseudo_log_trans(base = 10))
-# dev.off()
-
-# recalculate number of positive cells by multiplying per_pos with n cells (--> gets a result relative to cluster size)
-df_final$n_pos_backgroundsubtracted = (df_final$perc_pos_backgroundsubtracted/100)*df_final$n
-
-# set negative values to zero (if not, the pie chart looks weird with blank space)
-df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)
-
-# df_final[(df_final$meta25==16 & df_final$marker %in% c("CD107a_pos","IFN_pos","TNF_pos")),c("meta25","stimulation","marker","n","n_pos","perc_pos","perc_pos_backgroundsubtracted","n_pos_backgroundsubtracted")]
-
-# ggplot(df_final[(df_final$marker %in% c("TNF_pos","IFN_pos","CD107a_pos")&df_final$stimulation=="GAG"),], 
-#        aes(fill=stimulation,
-#            y=n_pos_backgroundsubtracted, 
-#            x=meta25)) + 
-#   geom_bar(position="dodge", 
-#            stat="identity",
-#            show.legend=F)+
-#   facet_wrap(~marker,
-#              ncol = 3, 
-#              scales="free_y",
-#              labeller = as_labeller(c("CD107a_pos" = "CD107a",
-#                                     "IFN_pos" = "IFN",
-#                                     "TNF_pos" = "TNF")))+
-#   scale_fill_manual(values = c("GAG" = "red"))+
-#   ylab("Percentage positive cells in cluster (NEG stimulation subtracted)")+
-#   theme_minimal()
-# 
-# df_plot = df_final[(df_final$marker %in% c("TNF_pos")&df_final$stimulation=="GAG"),c("meta25","n_pos_backgroundsubtracted")]
-# df_plot$n_pos_backgroundsubtracted = as.numeric(df_plot$n_pos_backgroundsubtracted)
-# 
-# ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
-#   geom_bar(width = 1, stat = "identity")+
-#   coord_polar("y", start=0)+
-#   theme_minimal()+
-#   scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])
-
-# define markers to plot
-markers_to_plot = c("TNF_pos","IFN_pos","CD107a_pos")
-df_plot = df_final[(df_final$marker %in% markers_to_plot &df_final$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
-
-# transform n_pos_backgroundsubtracted to a percentage 
-df_plot = df_plot %>% group_by(marker) %>%
-  mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
-
-# # get positions for labels
-# df2 <- df_plot %>% 
-#   mutate(csum = rev(cumsum(rev(percentage))), 
-#          pos = percentage/2 + lead(csum, 1),
-#          pos = if_else(is.na(pos), percentage/2, pos))
-
-# TODO: below 10 % --> group together in other (describe what's in other)
-png(filename = glue("{dir_store}/pie_charts.png"),height = 10,width = 20,units = "in",res = 300)
-ggplot(df_plot, aes(x="", y=percentage, fill=meta25))+
+png(filename = glue("{dir_store}/clusterdistribution_marker_stackedbar.png"), height = 15,width = 15,unit = "in",res=300)
+ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
   geom_bar(width = 1, stat = "identity")+
   facet_wrap(~marker)+
-  # geom_label_repel(data = df2,
-  #                  aes(y = pos, label = glue("meta{meta25} ({round(percentage,2)} %)")),
-  #                  size = 3, nudge_x = 1, show.legend = FALSE) +
-  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+
   blank_theme+theme(axis.text.x=element_blank())
 dev.off()
 
+df_plot2 =  dataframe[(dataframe$marker %in%c("TNF","IFN","CD107a")&dataframe$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
+df_plot2$marker = factor(df_plot2$marker,levels = c("IFN","TNF","CD107a"))
+n_labels <- ddply(.data=df_plot2, 
+                 .(marker), 
+                 summarize, 
+                 n=paste("n =", round(sum(n_pos_backgroundsubtracted))))
+ggplot(df_plot2, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
+  geom_bar(width = 1, stat = "identity")+
+  facet_wrap(~marker,scales="free",ncol=1)+
+  geom_text(data=n_labels,inherit.aes=FALSE, parse=FALSE,aes(x=-.3, y=0,label = n))+
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
+  blank_theme+theme(axis.text.x=element_blank(),legend.position = "none")
 
-blank_theme <- theme_minimal()+
-  theme(
-  axis.title.x = element_blank(),
-  axis.title.y = element_blank(),
-  panel.border = element_blank(),
-  panel.grid=element_blank(),
-  axis.ticks = element_blank()
-  )
+```
+
+```{r Project description figure, message = F}
+
+cell_types_of_interest <- setdiff(levels(sce$manual_id),"Unlabeled")
+
+fig1a = q_plotDR(sce,
+                 color_by = "manual_id",
+                 labelsize = 3,
+                 highlight_clust = cell_types_of_interest)+ 
+  guides(color=guide_legend(title="Manual gating",override.aes = list(size = 4)))
+
+
+fig1b = q_plotDR(sce,
+                 color_by = "meta25",
+                 labelsize = 3)+ 
+  guides(color=guide_legend(title="FlowSOM metacluster",override.aes = list(size = 4)))
+
+
+
+fig1c = plotDR(sce,
+               color_by = features_clustering,
+               ncol = 2)
+
+fig1d = q_plotDR_shuffled(filterSCE(sce,
+                         stimulation != "SEB"),
+               color_by = "IFN_pos",
+               facet_by = "stimulation",
+               ncol = 1)+
+  scale_color_manual(values = c("FALSE" = "grey70", "TRUE" = "red"))+
+  guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
+
+
+fig1e = print(ggplot(df_plot2, aes(x="", 
+                                   y=n_pos_backgroundsubtracted, 
+                                   fill=meta25))+
+                geom_bar(width = 1, 
+                         stat = "identity")+
+  facet_wrap(~marker,
+             scales="free",
+             ncol=1)+
+  geom_text(data=n_labels,
+            inherit.aes=FALSE, 
+            parse=FALSE,
+            aes(x=-.3, y=0,label = n))+
+  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+
+    coord_polar("y",start=0)+
+  blank_theme+
+    theme(axis.text.x=element_blank(),
+          legend.position = "none")
+)
+
+fig1a$layers[[1]]$aes_params$size = 0.005
+fig1b$layers[[1]]$aes_params$size = 0.005
+fig1c$layers[[1]]$aes_params$size = 0.000000001
+fig1d$layers[[1]]$aes_params$size = 0.000000001
+
+
+design <- "
+AAAAABBBBB
+AAAAABBBBB
+AAAAABBBBB
+CCCCCDDDEE
+CCCCCDDDEE
+CCCCCDDDEE
+CCCCCDDDEE
+"
+
+png(filename = glue("{dir_project}/3_results/ProjectDescription_Figure2.png"), width = 16,height = 15,unit = "in",res = 300)
+fig1a + fig1b + fig1c + fig1d + fig1e + plot_layout(design = design)+ plot_annotation(tag_levels = 'A')&theme(plot.tag = element_text(size = 20, face = 'bold'))
+dev.off()
 
 ```
 
 
-## 5) Save flowSet with cluster ids
 
-```{r save flowSet, message = F}
-
-fs_clust = sce2fcs(sce, 
-                   split_by = "sample_id", 
-                   keep_cd = T, 
-                   keep_dr = F, 
-                   assay = "exprs")
-
-saveRDS(fs_clust, glue("{dir_out}/flowSet_clust.rds"))
-
-```
-
-
-## 6) Session info
+## 4) Session info
 
 ```{r Session info, message = TRUE}
 

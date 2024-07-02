@@ -32,7 +32,7 @@ But first, please read the good practices below to ensure quality and safety:
 3) To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitLab (add the folder to a `.gitignore` file; see section 2.1)
 4) Follow the core principles below:
 
-![alt text](assets/project_structure.png){ width=70% }
+![alt text](3_results/project_structure.png){ width=70% }
 
 **Figure 1: Core principles of project structure for coherent data analysis pipelines**. Created with BioRender.com. Adapted from https://towardsdatascience.com/how-to-keep-your-research-projects-organized-part-1-folder-structure-10bd56034d3a
 
@@ -72,7 +72,7 @@ A flowFrame is a class for storing observed quantitative properties for a popula
 2.	Annotation for the parameters (e.g., measurement channels, stains, dynamic range)
 3.	Additional annotation provided through keywords in the .fcs file
 
-![alt text](assets/flowSet.png)
+![alt text](3_results/flowSet.png)
 
 **Figure 4: Import FCS files as a flowSet in RStudio**. Created with BioRender.com. Adapted from https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-106. 
 
@@ -87,7 +87,7 @@ As the physical process of exciting, emitting and detecting fluorescence signals
 
 The second step of data analysis is pregating to remove debris, doublets, and dead cells. A fourth and optional gating can be done on your cell type of interest (e.g. CD45+ positive leukocytes):
 
-![alt text](assets/gatingscheme_pregating.png)
+![alt text](3_results/gatingscheme_pregating.png)
 
 **Figure 5: Gating strategy**. 
 
@@ -107,7 +107,7 @@ Automatic quality control is performed using the **PeacoQC** package for removal
 
 An overview of the PeacoQC algorithm is shown below:
 
-![alt text](assets/peacoQC.jpg)
+![alt text](3_results/peacoQC.jpg)
 
 **Figure 6: Chart of the PeacoQC algorithm**. From: https://pubmed.ncbi.nlm.nih.gov/34549881/. 
 
@@ -116,11 +116,11 @@ The PeacoQC algorithm created QC fcs files, which can be read back into RStudio 
 ### Step E: Gate cell types
 **File to use**: `1_scripts/4_gateCellTypes.Rmd`
 
-![alt text](assets/gatingscheme_celltype.png)
+![alt text](3_results/gatingscheme_celltype.png)
 
 **Figure 7: Gating strategy of manual gating**
 
-![alt text](assets/gatingtree_celltypes.png){ width=80% }
+![alt text](3_results/gatingtree_celltypes.png){ width=80% }
 
 **Figure 8: Gating tree of manual gating**. 
 
