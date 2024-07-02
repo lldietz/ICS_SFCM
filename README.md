@@ -2,7 +2,7 @@
 
 This is a detailed description of the data analysis pipeline for spectral flow cytometry-based intracellular cytokine staining.
 
-## 1) Getting started
+## 1) Getting started with GitHub projects
 
 ### 1.1) Connect this repository to a local directory
 
@@ -25,18 +25,18 @@ You have now opened the project in R studio and are ready to proceed with data a
 
 But first, please read the good practices below to ensure quality and safety:
 
-## 2) Good practices
+### 1.3) Good practices
 
 1)  Do **not** share data on GitHub, only code
 2)  Do **not** share personal information (e.g. AUID in path to your data files - instead, use relative paths)
-3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitHub (add the folder to a `.gitignore` file; see section 2.1)
+3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitHub (add the folder to a `.gitignore` file; see section 1.4)
 4)  Follow the core principles below:
 
 <img src="3_results/project_structure.png" width="70%"/>
 
 **Figure 1: Core principles of project structure for coherent data analysis pipelines**. Created with BioRender.com. Adapted from <https://towardsdatascience.com/how-to-keep-your-research-projects-organized-part-1-folder-structure-10bd56034d3a>
 
-### 2.1) Adding files or folders to `.gitignore` file
+### 1.4) Adding files or folders to `.gitignore` file
 
 1)  In the terminal, navigate to your project folder with the cloned repository from step 3 above (using the cd and ls commands)
 2)  Check if you have a .gitignore file by writing `ls -a`
@@ -47,13 +47,17 @@ But first, please read the good practices below to ensure quality and safety:
 
 Now anything listed in the .gitignore file will be ignored by GitHub and therefore not uploaded.
 
-## 3) Data analysis
+## 2) Data analysis
 
 Below is a description of the analysis pipeline. The pipeline is inspired by:
 
 -   *den Braanker H, Bongenaar M and Lubberts E (2021) How to Prepare Spectral Flow Cytometry Datasets for High Dimensional Data Analysis: A Practical Workflow. Front. Immunol. 12:768113. doi: 10.3389/fimmu.2021.768113*
 
 -   *Van Gassen S, Callebaut B, Van Helden M, Lambrecht B, Demeester P, Dhaene T, Saeys Y (2015). “FlowSOM: Using self-organizing maps for visualization and interpretation of cytometry data.” Cytometry Part A, 87(7), 636-645. <https://onlinelibrary.wiley.com/doi/full/10.1002/cyto.a.22625>.*
+
+<img src="3_results/ICS SFCM_dataanalysis.png" width="100%"/>
+
+**Figure 2: Overview of data analysis**
 
 ### Install packages
 
@@ -73,7 +77,7 @@ The first step of data analysis is importing the unmixed FCS files into R. The *
 
 <img src="3_results/flowSet.png" width="100%"/>
 
-**Figure 2: Import FCS files as a flowSet in RStudio**. Created with BioRender.com. Adapted from <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-106>.
+**Figure 3: Import FCS files as a flowSet in RStudio**. Created with BioRender.com. Adapted from <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-106>.
 
 ### Step B: Data transformation
 
@@ -87,7 +91,7 @@ Below are all markers before and after transformation:
 
 <img src="3_results/transform_after.png" width="90%"/>
 
-**Figure 3: Before and after transformation**.
+**Figure 4: Before and after transformation**.
 
 ### Step C: Pregating
 
@@ -97,7 +101,7 @@ The second step of data analysis is pregating. Here cells are gated for lymphocy
 
 <img src="3_results/gatingscheme_pregating.png" width="100%"/>
 
-**Figure 4: Gating strategy for pregating**.
+**Figure 5: Gating strategy for pregating**.
 
 Gating is done using the **CytoExploreR** package with interactive pop-up windows to draw you gates. CytoExploreR needs a **gatingSet** object as input, which can be created directly from the transformed flowSet. Drawn gates are saved in a **gatingTemplate** (a csv file containing information on parent population, gate name, gate coordinates, etc.) which can be reused on other samples.
 
@@ -116,9 +120,9 @@ Automatic quality control is performed using the **PeacoQC** package for removal
 
 An overview of the PeacoQC algorithm is shown below:
 
-\<img src="3_results/peacoQC.jpg)
+<img src="3_results/peacoQC.png" width="100%"/>
 
-**Figure 5: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
+**Figure 6: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
 
 The PeacoQC algorithm creates QC fcs files, which can be read back into RStudio as a flowSet for downstream analysis.
 
@@ -134,9 +138,9 @@ The gating strategy is shown below:
 
 <img src="3_results/gatingscheme_celltype.png" width="100%"/>
 
-**Figure 6: Gating strategy of manual gating**
+**Figure 7: Gating strategy of manual gating**
 
-The cell labels obtained from manual gating can be converted into a **vector of cell labels** using the `q_Gating_matrix_aggregates` function in the `0_source` file. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
+The cell labels obtained from manual gating can be converted into a **vector of cell labels** using the `q_Gating_matrix_aggregates` function in the `0_source` file. This is a wrapper function based on the `FlowSOM::GetFlowJoLabels function`. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
 
 ### Step F: Gate marker positivity
 
@@ -148,7 +152,7 @@ Below is an example of the gate for IFN faceted by stimulation:
 
 <img src="3_results/gatesMarkers_IFN.png" width="100%"/>
 
-**Figure 7: Example of gating for IFN**
+**Figure 8: Example of gating for IFN**
 
 Using the function `q_Gating_matrix_aggregates` we can get a **boolean matrix of TRUE/FALSE for marker positivity** for all cells in the flowSet/gatingSet. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of marker positivity on a UMAP.
 
@@ -164,7 +168,7 @@ To cluster and reduce the dimensions of our flowSet, we first need to convert it
 
 <img src="3_results/sce.png" width="100%"/>
 
-**Figure 8: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
+**Figure 9: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
 
 In colData(sce), the columns **manual_id** and **IFN_pos** are highlighted in light yellow. These are the results of steps E and F.
 
@@ -176,4 +180,8 @@ FlowSOM clustering and dimensionality reduction (UMAP) of the data is done with 
 
 #### Subtracting background (NEG) from signal per marker per cluster
 
+To subtract the background signal (NEG) to obtain the real signal from Gag stimulated cells,...
+
 <img src="3_results/clusterdistribution_marker_pies.png" width="100%"/>
+
+**Figure 10: Distribution of positive cells across FlowSOM clusters**. The total number of positive cells is shown in the middle of each pie chart.

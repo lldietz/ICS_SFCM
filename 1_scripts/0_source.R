@@ -289,6 +289,7 @@ q_plotDR_shuffled = function(sce, ...) {
   
 }
 
+# wrapper function inspired by FlowSOM::GetFlowJoLabels
 q_Gating_matrix_aggregates = function(flowSet, gatingTemplate,...){
   
   gates = GatingSet(flowSet)
