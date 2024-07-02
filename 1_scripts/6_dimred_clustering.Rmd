@@ -336,6 +336,8 @@ for(color_plot in marker_positivity_to_plot){
 
 ```{r Weighted positivity, message=FALSE}
 
+colData(sce)$meta25 = cluster_ids(sce,"meta25")
+
 dataframe = q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust(sce,
                                                             k = "meta25",
                                                             condition_col = "stimulation",
@@ -357,30 +359,12 @@ ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
   facet_wrap(~marker,scales="free")+
   geom_text(data=n_labels,inherit.aes=FALSE, parse=FALSE,aes(x=-.3, y=0,label = n))+
   scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
-  blank_theme+theme(axis.text.x=element_blank())+
-  ggtitle(label = "Distribution of FlowSOM clusters among positive cells")
+  theme_void()+
+  ggtitle(label = "Distribution of FlowSOM clusters among positive cells")+
+  ggeasy::easy_center_title()
 dev.off()
 
-png(filename = glue("{dir_store}/clusterdistribution_marker_stackedbar.png"), height = 15,width = 15,unit = "in",res=300)
-ggplot(df_plot, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
-  geom_bar(width = 1, stat = "identity")+
-  facet_wrap(~marker)+
-  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+
-  blank_theme+theme(axis.text.x=element_blank())
-dev.off()
 
-df_plot2 =  dataframe[(dataframe$marker %in%c("TNF","IFN","CD107a")&dataframe$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
-df_plot2$marker = factor(df_plot2$marker,levels = c("IFN","TNF","CD107a"))
-n_labels <- ddply(.data=df_plot2, 
-                 .(marker), 
-                 summarize, 
-                 n=paste("n =", round(sum(n_pos_backgroundsubtracted))))
-ggplot(df_plot2, aes(x="", y=n_pos_backgroundsubtracted, fill=meta25))+
-  geom_bar(width = 1, stat = "identity")+
-  facet_wrap(~marker,scales="free",ncol=1)+
-  geom_text(data=n_labels,inherit.aes=FALSE, parse=FALSE,aes(x=-.3, y=0,label = n))+
-  scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+coord_polar("y",start=0)+
-  blank_theme+theme(axis.text.x=element_blank(),legend.position = "none")
 
 ```
 
@@ -415,6 +399,12 @@ fig1d = q_plotDR_shuffled(filterSCE(sce,
   guides(color=guide_legend(title="IFN positive",override.aes = list(size = 4)))
 
 
+df_plot2 =  dataframe[(dataframe$marker %in%c("TNF","IFN","CD107a")&dataframe$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
+df_plot2$marker = factor(df_plot2$marker,levels = c("IFN","TNF","CD107a"))
+n_labels <- ddply(.data=df_plot2, 
+                 .(marker), 
+                 summarize, 
+                 n=paste("n =", round(sum(n_pos_backgroundsubtracted))))
 fig1e = print(ggplot(df_plot2, aes(x="", 
                                    y=n_pos_backgroundsubtracted, 
                                    fill=meta25))+
@@ -429,9 +419,8 @@ fig1e = print(ggplot(df_plot2, aes(x="",
             aes(x=-.3, y=0,label = n))+
   scale_fill_manual(values = CATALYST:::.cluster_cols[1:25])+
     coord_polar("y",start=0)+
-  blank_theme+
-    theme(axis.text.x=element_blank(),
-          legend.position = "none")
+  theme_void() +
+  easy_remove_legend()
 )
 
 fig1a$layers[[1]]$aes_params$size = 0.005

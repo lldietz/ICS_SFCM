@@ -34,6 +34,7 @@ library(grid)
 library(tibble)
 library(tidyr)
 library(ggpointdensity)
+library(ggeasy)
 
 # SET AND WRITE DIRECTORIES
 dir_project = dirname(getwd())
@@ -378,7 +379,7 @@ q_Gating_matrix_aggregates = function(flowSet, gatingTemplate,...){
   
 }
 
-# TODO: find better column names for the dataframe created (to make more intuitive)
+# TODO: find better column names for the dataframe created and maybe better name for function? (to make more intuitive)
 q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust = function(sce,k,condition_col,background_value){
   
   n_cells_sce = nrow(colData(sce))
@@ -428,7 +429,7 @@ q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust = function(sce,k,condition_col,b
   # calculate pers_pos
   df_counts$perc_pos = (df_counts$n_pos/df_counts$n)*100
   
-  # subtract negative value per cluster and marker (TODO: FIX!!!)
+  # subtract negative value per cluster and marker 
   df_final = df_counts %>%
     group_by(!!! rlang::sym(metaname)) %>%
     mutate(perc_pos_backgroundsubtracted = perc_pos - perc_pos[get({{condition_col}}) == background_value])

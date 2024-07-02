@@ -51,6 +51,21 @@ for(feature in features_state){
 dev.off()
 
 
+
+png(filename = glue("{dir_project}/3_results/gatesMarkers_IFN.png"),width = 10, height = 3, unit = "in", res = 300)
+p = cyto_plot(gs,
+              parent = "root",
+              channels = c("BV421-A","SSC-A"),
+              alias = "",
+              axes_limits = "data",
+              group_by = "stimulation")
+print(p)
+
+dev.off()
+
+
+######## Save matrix ######## 
+
 gating_result = q_Gating_matrix_aggregates(fs_clean,my_gatingTemplate)
 boolean_matrix = gating_result$bool_matrix
 write.csv(boolean_matrix, file = glue("{dir_out}/boolean_matrix_marker+.csv"))
