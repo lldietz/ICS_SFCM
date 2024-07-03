@@ -120,7 +120,7 @@ Automatic quality control is performed using the **PeacoQC** package for removal
 
 An overview of the PeacoQC algorithm is shown below:
 
-<img src="3_results/peacoQC.png" width="100%"/>
+<img src="3_results/peacoQC.png" width="70%"/>
 
 **Figure 6: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
 
@@ -178,9 +178,49 @@ FlowSOM clustering and dimensionality reduction (UMAP) of the data is done with 
 
 <img src="3_results/UMAP_facet_stim_TNF_pos.png" width="100%"/>
 
-#### Subtracting background (NEG) from signal per marker per cluster
+#### Bulk metacluster subraction of background (NEG) from signal (Gag) for each marker
 
-To subtract the background signal (NEG) to obtain the real signal from Gag stimulated cells,...
+For subtraction of background signal to obtain the real signal from Gag stimulated cells, the function `q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust` is used. In short, this function takes the boolean matrix from step F and the FlowSOM cluster labels from step E and calculates a percentage of positive cells for all gated markers per FlowSOM metacluster. Then, the percentage of positive cells from negative stimulation (NEG) is subtracted from the corresponding signal (same metacluster, same marker) from Gag stimulated condition to get the bulk background subtracted value for each marker within each metacluster.
+
+The function performs the following calculations:
+
+1)  Pivot boolean matrix longer
+
+`df_long = df %>% pivot_longer(cols = -c(metacluster, stimulation), names_to = "marker", values_to = "pos")`
+
+2)  Group by metacluster, stimulation, and marker to count number of positive cells per metacluster and stimulation for each marker
+
+`counts_pos = df_long %>% group_by(metacluster, stimulation,marker) %>% summarise(n_pos = sum(pos))`
+
+3)  Get metacluster sizes per stimulation
+
+`cluster_sizes = df %>% group_by(metacluster,stimulation) %>% tally()`
+
+4)  Combine the results of step 2 and 3 to one dataframe
+
+`df_counts = counts_pos %>% right_join(cluster_sizes, by=c(metalevel,stimulation))`
+
+5)  Calculate percentage of positive cells by dividing number of positive cells with number of cells in cluster
+
+`df_counts$perc_pos = (df_counts$n_pos/df_counts$n)*100`
+
+6)  For each cluster and marker, subtract the percentage from corresponding negative stimulation (i.e. subtracting bacground for each marker in the corresponding cluster)
+
+`df_final = df_counts %>% group_by(metacluster) %>% mutate(perc_pos_backgroundsubtracted = perc_pos - perc_pos[stimulation == "NEG"])`
+
+7)  Remove all background values from the dataframe
+
+`df_final = df_final[df_final[stimulation]!="NEG",]`
+
+8)  Convert the background subtracted percentage of positive cells back to a number of positive cells by multipying by cluster size
+
+`df_final$n_pos_backgroundsubtracted = (df_final$perc_pos_backgroundsubtracted/100)*df_final\$n`
+
+9)  Set negative values to zero:
+
+`df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)`
+
+Below is a plot of the final result:
 
 <img src="3_results/clusterdistribution_marker_pies.png" width="100%"/>
 

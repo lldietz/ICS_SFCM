@@ -447,12 +447,12 @@ q_ICSsfcm_GatingMarkers_BackgroundSub_BulkClust = function(sce,k,condition_col,b
   # set negative values to zero (if not, the pie chart looks weird with blank space)
   df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)
   
-  # calculate the cluster distribution for each marker and stimulation
-  dataframe = df_final %>% 
-    group_by(!!! rlang::syms(condition_col), marker) %>%
-    mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+  # # calculate the cluster distribution for each marker and stimulation
+  # dataframe = df_final %>% 
+  #   group_by(!!! rlang::syms(condition_col), marker) %>%
+  #   mutate(percentage = n_pos_backgroundsubtracted / sum(n_pos_backgroundsubtracted) * 100)
+  #  return(dataframe)
   
-  
-  return(dataframe)
+  return(df_final)
   
 }
