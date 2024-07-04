@@ -75,7 +75,7 @@ The first step of data analysis is importing the unmixed FCS files into R. The *
 2.  Annotation for the parameters (e.g., measurement channels, stains, dynamic range)
 3.  Additional annotation provided through keywords in the .fcs file
 
-<img src="3_results/flowSet.png" width="100%"/>
+<img src="3_results/flowSet.png" width="70%"/>
 
 **Figure 3: Import FCS files as a flowSet in RStudio**. Created with BioRender.com. Adapted from <https://bmcbioinformatics.biomedcentral.com/articles/10.1186/1471-2105-10-106>.
 
@@ -91,8 +91,6 @@ Below are all markers before and after transformation:
 
 <img src="3_results/transform_after.png" width="90%"/>
 
-**Figure 4: Before and after transformation**.
-
 ### Step C: Pregating
 
 **File to use**: `1_scripts/2_pregate.R`
@@ -100,8 +98,6 @@ Below are all markers before and after transformation:
 The second step of data analysis is pregating. Here cells are gated for lymphocytes → single cells → live cells → dump- cells → CD19-CD13+ cells:
 
 <img src="3_results/gatingscheme_pregating.png" width="100%"/>
-
-**Figure 5: Gating strategy for pregating**.
 
 Gating is done using the **CytoExploreR** package with interactive pop-up windows to draw you gates. CytoExploreR needs a **gatingSet** object as input, which can be created directly from the transformed flowSet. Drawn gates are saved in a **gatingTemplate** (a csv file containing information on parent population, gate name, gate coordinates, etc.) which can be reused on other samples.
 
@@ -122,9 +118,13 @@ An overview of the PeacoQC algorithm is shown below:
 
 <img src="3_results/peacoQC.png" width="70%"/>
 
-**Figure 6: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
+**Figure 4: Chart of the PeacoQC algorithm**. From: <https://pubmed.ncbi.nlm.nih.gov/34549881/>.
 
-The PeacoQC algorithm creates QC fcs files, which can be read back into RStudio as a flowSet for downstream analysis.
+For each file, a report is created:
+
+<img src="3_results/PeacoQC_E01_Fullstain_SEB_WLSM_tf.png" width="100%"/>
+
+The report shows events sorted by acquisition time and the signal for each marker. Removed events are highlighted in color codes based on which part of the algorithm decided to remove it. The PeacoQC algorithm creates QC fcs files, which can be read back into RStudio as a flowSet for downstream analysis.
 
 ### Step E: Gate cell types
 
@@ -138,9 +138,7 @@ The gating strategy is shown below:
 
 <img src="3_results/gatingscheme_celltype.png" width="100%"/>
 
-**Figure 7: Gating strategy of manual gating**
-
-The cell labels obtained from manual gating can be converted into a **vector of cell labels** using the `q_Gating_matrix_aggregates` function in the `0_source` file. This is a wrapper function based on the `FlowSOM::GetFlowJoLabels function`. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
+The cell labels obtained from manual gating can be converted into a **vector of cell labels** using the `q_Gating_matrix_vector` function in the `0_source` file. This is a wrapper function based on the `FlowSOM::GetFlowJoLabels` function. The resulting vector can be added to colData(sce) in the script `6_dimred_clustering` for visualization of manual cell labels on a UMAP.
 
 ### Step F: Gate marker positivity
 
@@ -152,9 +150,7 @@ Below is an example of the gate for IFN faceted by stimulation:
 
 <img src="3_results/gatesMarkers_IFN.png" width="100%"/>
 
-**Figure 8: Example of gating for IFN**
-
-Using the function `q_Gating_matrix_aggregates` we can get a **boolean matrix of TRUE/FALSE for marker positivity** for all cells in the flowSet/gatingSet. This vector can later be added to colData(sce) in script `6_dimred_clustering` for visualization of marker positivity on a UMAP.
+Using the function `q_Gating_matrix_vector` we can get a **boolean matrix of TRUE/FALSE for marker positivity** for all cells in the flowSet/gatingSet. This matrix can later be added to colData(sce) in the script `6_dimred_clustering` for visualization of marker positivity on a UMAP.
 
 The matrix looks like this:
 
@@ -168,7 +164,7 @@ To cluster and reduce the dimensions of our flowSet, we first need to convert it
 
 <img src="3_results/sce.png" width="100%"/>
 
-**Figure 9: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
+**Figure 5: SCE** Created in BioRender.com. Adapted from: <https://bioconductor.org/books/3.14/OSCA.intro/the-singlecellexperiment-class.html>.
 
 In colData(sce), the columns **manual_id** and **IFN_pos** are highlighted in light yellow. These are the results of steps E and F.
 
@@ -220,8 +216,6 @@ The function performs the following calculations:
 
 `df_final$n_pos_backgroundsubtracted = pmax(df_final$n_pos_backgroundsubtracted,0)`
 
-Below is a plot of the final result:
+Below is a plot of the final result showing the distribution of positive cells across FlowSOM cluster with the total number of positive cells in the middle of each pie chart:
 
 <img src="3_results/clusterdistribution_marker_pies.png" width="100%"/>
-
-**Figure 10: Distribution of positive cells across FlowSOM clusters**. The total number of positive cells is shown in the middle of each pie chart.
