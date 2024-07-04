@@ -351,6 +351,16 @@ dataframe$marker = gsub("_pos","",dataframe$marker)
 df_plot =  dataframe[(dataframe$stimulation=="GAG"),c("meta25","marker","n_pos_backgroundsubtracted")]
 
 require(plyr)
+
+n_order = ddply(.data=df_plot, 
+                 .(marker), 
+                 summarize, 
+                 n=round(sum(n_pos_backgroundsubtracted))) %>% arrange(desc(n))
+
+marker_order = n_order$marker
+
+df_plot$marker = factor(df_plot$marker, levels = marker_order)
+
 n_labels <- ddply(.data=df_plot, 
                  .(marker), 
                  summarize, 

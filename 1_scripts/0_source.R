@@ -290,7 +290,7 @@ q_plotDR_shuffled = function(sce, ...) {
 }
 
 # wrapper function inspired by FlowSOM::GetFlowJoLabels
-q_Gating_matrix_aggregates = function(flowSet, gatingTemplate,...){
+q_Gating_matrix_vector = function(flowSet, gatingTemplate,...){
   
   gates = GatingSet(flowSet)
   cyto_gatingTemplate_apply(gates, gatingTemplate)
