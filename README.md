@@ -2,50 +2,14 @@
 
 This is a detailed description of the data analysis pipeline for spectral flow cytometry-based intracellular cytokine staining.
 
-## 1) Getting started with GitHub projects
+## 1) Good practices
 
-### 1.1) Connect this repository to a local directory
-
-1)  Scroll to the top of this page and click the blue "Code" botton
-2)  Copy the link under "Clone with SSH"
-3)  Open your terminal and navigate to your local folder where you want to clone the git repository to (using the cd and ls commands)
-4)  Type `git clone [copied link from step 2]` → Press enter
-
-You have now cloned the repository to your computer.
-
-Now it's time to open the project in R studio:
-
-### 1.2) Open project in RStudio
-
-5)  Open R studio
-6)  Press "File" → "New Project..." → "Existing Directory" → "Browse" → choose the local folder from step 3
-7)  Press "Create Project"
-
-You have now opened the project in R studio and are ready to proceed with data analysis.
-
-But first, please read the good practices below to ensure quality and safety:
-
-### 1.3) Good practices
-
-1)  Do **not** share data on GitHub, only code
-2)  Do **not** share personal information (e.g. AUID in path to your data files - instead, use relative paths)
-3)  To best fulfill point 1 and 2, create a `0_data` folder on your computer which is **not** uploaded to GitHub (add the folder to a `.gitignore` file; see section 1.4)
-4)  Follow the core principles below:
+Follow the core principles below:
 
 <img src="3_results/project_structure.png" width="70%"/>
 
 **Figure 1: Core principles of project structure for coherent data analysis pipelines**. Created with BioRender.com. Adapted from <https://towardsdatascience.com/how-to-keep-your-research-projects-organized-part-1-folder-structure-10bd56034d3a>
 
-### 1.4) Adding files or folders to `.gitignore` file
-
-1)  In the terminal, navigate to your project folder with the cloned repository from step 3 above (using the cd and ls commands)
-2)  Check if you have a .gitignore file by writing `ls -a`
-3)  If no .gitignore file is listed, create a .gitignore file by writing `touch .gitignore`, else skip this step
-4)  Check the contents of the .gitignore file by writing `cat .gitignore`
-5)  If the file/folder you want not to be ignored by Git (i.e. not uploaded) is not present in the .gitignore file, write `echo 'FILENAME/FOLDERNAME' >> .gitignore`
-6)  Check contents of the .gitignore file (see step 4) to confirm the filename or foldername was added successfully
-
-Now anything listed in the .gitignore file will be ignored by GitHub and therefore not uploaded.
 
 ## 2) Data analysis
 
